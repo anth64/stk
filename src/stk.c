@@ -1,14 +1,14 @@
 #include "stk.h"
-#include <stdio.h>
+#include "stk_log.h"
 
 int stk_init(void)
 {
-	printf("stk initialized v%s\n", STK_VERSION_STRING);
+	stk_log(stdout, "[stk] stk initialized v%s!", STK_VERSION_STRING);
 	return 0;
 }
 
 int stk_shutdown(void)
 {
-	printf("stk shutdown\n");
+	stk_log(stdout, "stk shutdown");
 	return 0;
 }
