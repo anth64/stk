@@ -9,6 +9,6 @@ int stk_init(void)
 
 int stk_shutdown(void)
 {
-	stk_log(stdout, "stk shutdown");
+	stk_log(stdout, "[stk] stk shutdown");
 	return 0;
 }
