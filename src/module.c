@@ -1,9 +1,12 @@
+#include "stk.h"
 #include <stdlib.h>
 
-static void **stk_handles = NULL;
-static void (**stk_inits)(void) = NULL;
-static void (**stk_shutdowns)(void) = NULL;
-static const char **stk_ids = NULL;
+typedef void (*stk_module_func)(void);
 
-static size_t stk_module_count = 0;
-static size_t stk_module_capacity = 0;
+static void **stk_handles = NULL;
+static stk_module_func *stk_inits = NULL;
+static stk_module_func *stk_shutdowns = NULL;
+
+static size_t module_count = 0;
+
+size_t stk_module_count(void) { return module_count; }
