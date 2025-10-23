@@ -2,7 +2,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-void stk_log_file(FILE *fp, const char *fmt, ...)
+void stk_log(FILE *fp, const char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
