@@ -60,3 +60,12 @@ static void stk_module_unload(size_t index)
 
 	--module_count;
 }
+
+static void stk_free_file_list(char **list, size_t count)
+{
+	size_t i;
+	for (i = 0; i < count; ++i)
+		free(list[i]);
+
+	free(list);
+}
