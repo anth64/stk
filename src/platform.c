@@ -1,15 +1,27 @@
 #include <stdlib.h>
 #include <string.h>
-#ifdef __linux__
-#include <stdint.h>
-#include <sys/inotify.h>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <dlfcn.h>
 #include <unistd.h>
 #endif
 
-#ifdef _WIN32
+#ifdef __linux__
+#include <sys/inotify.h>
+#elif defined(_WIN32)
 #include <windows.h>
-#else
-#include <dlfcn.h>
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) ||    \
+    defined(__NetBSD__)
+#include <fcntl.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#include <sys/types.h>
+
+typedef struct {
+	int kq;
+	int dir_fd;
+} kqueue_handle;
+
 #endif
 
 #define EVENT_BUFFER_SIZE 4096
@@ -71,6 +83,39 @@ void *platform_directory_watch_start(const char *path)
 		return NULL;
 
 	return (void *)handle;
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(OpenBSD) ||        \
+    defined(__NetBSD__)
+	kqueue_handle *handle;
+	struct kevent change;
+
+	handle = malloc(sizeof(kqueue_handle));
+	if (!handle)
+		return NULL;
+
+	handle->kq = kqueue();
+	if (handle->kq < 0) {
+		free(handle);
+		return NULL;
+	}
+
+	handle->dir_fd = open(path, O_RDONLY);
+	if (handle->dir_fd < 0) {
+		close(handle->kq);
+		free(handle);
+		return NULL;
+	}
+
+	EV_SET(&change, handle->dir_fd, EVFILT_VNODE, EV_ADD | EV_CLEAR,
+	       NOTE_WRITE | NOTE_DELETE | NOTE_EXTEND | NOTE_RENAME, 0, 0);
+
+	if (kevent(handle->kq, &change, 1, NULL, 0, NULL) < 0) {
+		close(handle->dir_fd);
+		close(handle->kq);
+		free(handle);
+		return NULL;
+	}
+
+	return (void *)handle;
 #else
 	return NULL
 #endif
@@ -89,6 +134,14 @@ void platform_directory_watch_stop(void *handle)
 	HANDLE h;
 	h = (HANDLE)handle;
 	CloseHandle(h);
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) ||    \
+    defined(__NetBSD__)
+	kqueue_handle *handle;
+
+	handle = (kqueue_handle *)handle;
+	close(handle->dir_fd);
+	close(handle->kq);
+	free(handle);
 #else
 	(void)handle;
 #endif
