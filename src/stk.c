@@ -14,6 +14,7 @@ size_t stk_module_count(void);
 int stk_module_load(const char *path);
 void stk_module_unload(size_t index);
 void stk_module_unload_all(void);
+int stk_module_init_memory(size_t capacity);
 
 int stk_init(const char *mod_dir)
 {
@@ -29,6 +30,10 @@ int stk_init(const char *mod_dir)
 	}
 
 	files = platform_directory_init_scan(stk_mod_dir, &file_count);
+
+	if (file_count > 0 && stk_module_init_memory(file_count) != 0)
+		return -1;
+
 	if (!files)
 		goto scanned;
 
@@ -42,7 +47,7 @@ int stk_init(const char *mod_dir)
 
 scanned:
 	watch_handle = platform_directory_watch_start(stk_mod_dir);
-	stk_log(stdout, "[stk] stk initialized v%s! Loaded %zu from %s",
+	stk_log(stdout, "[stk] stk v%s initialized! Loaded %zu mods from %s",
 		STK_VERSION_STRING, module_count, stk_mod_dir);
 	return 0;
 }

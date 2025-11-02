@@ -61,12 +61,8 @@ void stk_module_unload(size_t index)
 	--module_count;
 }
 
-void stk_module_unload_all(void)
+void stk_module_free_memory(void)
 {
-	size_t i;
-	for (i = module_count; i > 0; --i)
-		stk_module_unload(i - 1);
-
 	free(stk_handles);
 	free(stk_inits);
 	free(stk_shutdowns);
@@ -74,4 +70,27 @@ void stk_module_unload_all(void)
 	stk_handles = NULL;
 	stk_inits = NULL;
 	stk_shutdowns = NULL;
+}
+
+int stk_module_init_memory(size_t capacity)
+{
+	stk_handles = malloc(capacity * sizeof(void *));
+	stk_inits = malloc(capacity * sizeof(stk_module_func));
+	stk_shutdowns = malloc(capacity * sizeof(stk_module_func));
+
+	if (!stk_handles || !stk_inits || !stk_shutdowns) {
+		stk_module_free_memory();
+		return -1;
+	}
+
+	return 0;
+}
+
+void stk_module_unload_all(void)
+{
+	size_t i;
+	for (i = module_count; i > 0; --i)
+		stk_module_unload(i - 1);
+
+	stk_module_free_memory();
 }
