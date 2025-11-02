@@ -242,6 +242,7 @@ char **platform_directory_init_scan(const char *path, size_t *out_count)
 
 	dir = opendir(path);
 	if (!dir) {
+		mkdir(path, 0755);
 		*out_count = 0;
 		return NULL;
 	}
@@ -293,6 +294,7 @@ char **platform_directory_init_scan(const char *path, size_t *out_count)
 
 	find_handle = FindFirstFileW(search_path, &find_data);
 	if (find_handle == INVALID_HANDLE_VALUE) {
+		CreateDirectoryA(path, NULL);
 		*out_count = 0;
 		return NULL;
 	}
