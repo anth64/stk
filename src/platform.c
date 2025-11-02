@@ -281,9 +281,68 @@ char **platform_directory_init_scan(const char *path, size_t *out_count)
 		strcpy(file_list[index], entry->d_name);
 		++index;
 	}
+	closedir(dir);
 
 #elif defined(_WIN32)
-	return NULL;
+	WIN32_FIND_DATAW find_data;
+	HANDLE find_handle;
+	WCHAR search_path[PATH_BUFFER_SIZE];
+	int utf8_len;
+
+	swprintf(search_path, PATH_BUFFER_SIZE, L"%S\\*", path);
+
+	find_handle = FindFirstFileW(search_path, &find_data);
+	if (find_handle == INVALID_HANDLE_VALUE) {
+		*out_count = 0;
+		return NULL;
+	}
+
+	do {
+		if (!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			count++;
+	} while (FindNextFileW(find_handle, &find_data));
+
+	FindClose(find_handle);
+
+	if (count == 0) {
+		*out_count = 0;
+		return NULL;
+	}
+
+	find_handle = FindFirstFileW(search_path, &find_data);
+	if (find_handle == INVALID_HANDLE_VALUE) {
+		*out_count = 0;
+		return NULL;
+	}
+
+	file_list = (char **)malloc(count * sizeof(char *));
+	if (!file_list) {
+		FindClose(find_handle);
+		*out_count = 0;
+		return NULL;
+	}
+
+	do {
+		if (!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+		    index < count) {
+			utf8_len =
+			    WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName,
+						-1, NULL, 0, NULL, NULL);
+			if (utf8_len > 0) {
+				file_list[index] = (char *)malloc(utf8_len);
+				if (file_list[index]) {
+					WideCharToMultiByte(
+					    CP_UTF8, 0, find_data.cFileName, -1,
+					    file_list[index], utf8_len, NULL,
+					    NULL);
+					index++;
+				}
+			}
+		}
+	} while (FindNextFileW(find_handle, &find_data) && index < count);
+
+	FindClose(find_handle);
+
 #else
 	return NULL;
 #endif
