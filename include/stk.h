@@ -4,6 +4,8 @@
 #include "stk_version.h"
 #include <stdlib.h>
 
+#define MOD_DIR_BUFFER_SIZE 32
+
 #ifdef __cplusplus
 extern "C" {
 #endif

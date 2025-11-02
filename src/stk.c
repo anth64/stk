@@ -1,7 +1,7 @@
 #include "stk.h"
 #include "stk_log.h"
 
-extern char *stk_mod_dir;
+extern char stk_mod_dir[MOD_DIR_BUFFER_SIZE];
 
 int stk_init(const char *mod_dir)
 {

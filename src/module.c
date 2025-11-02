@@ -7,7 +7,7 @@ void *platform_get_symbol(void *handle, const char *symbol);
 
 typedef void (*stk_module_func)(void);
 
-char *stk_mod_dir = NULL;
+char stk_mod_dir[MOD_DIR_BUFFER_SIZE];
 static void **stk_handles = NULL;
 static stk_module_func *stk_inits = NULL;
 static stk_module_func *stk_shutdowns = NULL;
