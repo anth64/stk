@@ -1,27 +1,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__unix__) || defined(__APPLE__)
+#if defined(__linux__)
 #include <dlfcn.h>
-#include <unistd.h>
-#endif
-
-#ifdef __linux__
 #include <sys/inotify.h>
+#include <unistd.h>
 #elif defined(_WIN32)
 #include <windows.h>
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) ||    \
-    defined(__NetBSD__)
-#include <fcntl.h>
-#include <sys/event.h>
-#include <sys/time.h>
-#include <sys/types.h>
-
-typedef struct {
-	int kq;
-	int dir_fd;
-} kqueue_handle;
-
 #endif
 
 #define EVENT_BUFFER_SIZE 4096
@@ -71,7 +56,7 @@ void *platform_directory_watch_start(const char *path)
 		return NULL;
 	}
 
-	return (void *)(intptr_t)fd;
+	return (void *)(long)fd;
 #elif defined(_WIN32)
 	HANDLE handle;
 	handle =
@@ -81,39 +66,6 @@ void *platform_directory_watch_start(const char *path)
 
 	if (handle == INVALID_HANDLE_VALUE)
 		return NULL;
-
-	return (void *)handle;
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(OpenBSD) ||        \
-    defined(__NetBSD__)
-	kqueue_handle *handle;
-	struct kevent change;
-
-	handle = malloc(sizeof(kqueue_handle));
-	if (!handle)
-		return NULL;
-
-	handle->kq = kqueue();
-	if (handle->kq < 0) {
-		free(handle);
-		return NULL;
-	}
-
-	handle->dir_fd = open(path, O_RDONLY);
-	if (handle->dir_fd < 0) {
-		close(handle->kq);
-		free(handle);
-		return NULL;
-	}
-
-	EV_SET(&change, handle->dir_fd, EVFILT_VNODE, EV_ADD | EV_CLEAR,
-	       NOTE_WRITE | NOTE_DELETE | NOTE_EXTEND | NOTE_RENAME, 0, 0);
-
-	if (kevent(handle->kq, &change, 1, NULL, 0, NULL) < 0) {
-		close(handle->dir_fd);
-		close(handle->kq);
-		free(handle);
-		return NULL;
-	}
 
 	return (void *)handle;
 #else
@@ -128,20 +80,12 @@ void platform_directory_watch_stop(void *handle)
 	if (!handle)
 		return;
 
-	fd = (int)(intptr_t)handle;
+	fd = (int)(long)handle;
 	close(fd);
 #elif defined(_WIN32)
 	HANDLE h;
 	h = (HANDLE)handle;
 	CloseHandle(h);
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) ||    \
-    defined(__NetBSD__)
-	kqueue_handle *handle;
-
-	handle = (kqueue_handle *)handle;
-	close(handle->dir_fd);
-	close(handle->kq);
-	free(handle);
 #else
 	(void)handle;
 #endif
@@ -158,7 +102,7 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 	size_t file_count, index;
 	char **file_list;
 
-	fd = (int)(intptr_t)handle;
+	fd = (int)(long)handle;
 	bytes_read = read(fd, buffer, sizeof(buffer));
 	if (bytes_read <= 0) {
 		*out_count = 0;
@@ -227,11 +171,34 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 
 	file_count = 0;
 	event_ptr = buffer;
-
 	while (1) {
 		info = (FILE_NOTIFY_INFORMATION *)event_ptr;
+		file_count++;
+
+		if (info->NextEntryOffset == 0)
+			break;
+
+		event_ptr += info->NextEntryOffset;
+	}
+
+	if (file_count == 0) {
+		*out_count = 0;
+		return NULL;
+	}
+
+	file_list = malloc(file_count * sizeof(char *));
+	if (!file_list) {
+		*out_count = 0;
+		return NULL;
+	}
+
+	index = 0;
+	event_ptr = buffer;
+	while (1) {
+		info = (FILE_NOTIFY_INFORMATION *)event_ptr;
+
 		char_count = WideCharToMultiByte(
-		    CP_UTF8, info->FileName,
+		    CP_UTF8, 0, info->FileName,
 		    info->FileNameLength / sizeof(WCHAR), NULL, 0, NULL, NULL);
 
 		if (char_count > 0) {
@@ -242,7 +209,7 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 				    info->FileNameLength / sizeof(WCHAR),
 				    file_list[index], char_count, NULL, NULL);
 				file_list[index][char_count] = '\0';
-				++index
+				index++;
 			}
 		}
 
