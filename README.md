@@ -2,7 +2,7 @@
 
 `stk` is a lightweight, modular toolkit for building games and game engines. It provides a **portable foundation** for dynamically loading modules, native or WASM, without enforcing any architecture or design choices.
 
-It is designed to run on a wide range of systems, from retro consoles and embedded devices to modern PCs.
+It is designed to run on modern systems running POSIX and Windows.
 
 ---
 
