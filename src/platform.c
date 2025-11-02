@@ -1,15 +1,19 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #if defined(__linux__)
+#include <dirent.h>
 #include <dlfcn.h>
 #include <sys/inotify.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #elif defined(_WIN32)
 #include <windows.h>
 #endif
 
 #define EVENT_BUFFER_SIZE 4096
+#define PATH_BUFFER_SIZE 1024
 
 void *platform_load_library(const char *path)
 {
@@ -222,5 +226,67 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 	*out_count = index;
 	return file_list;
 #else
+	return NULL;
 #endif
+}
+
+char **platform_directory_init_scan(const char *path, size_t *out_count)
+{
+	char **file_list = NULL;
+	size_t count = 0, index = 0;
+	char full_path[PATH_BUFFER_SIZE];
+#ifdef __linux__
+	DIR *dir;
+	struct dirent *entry;
+	struct stat file_stat;
+
+	dir = opendir(path);
+	if (!dir) {
+		*out_count = 0;
+		return NULL;
+	}
+
+	while ((entry = readdir(dir)) != NULL) {
+		sprintf(full_path, "%s/%s", path, entry->d_name);
+		if (stat(full_path, &file_stat) == 0 &&
+		    S_ISREG(file_stat.st_mode))
+			++count;
+	}
+	closedir(dir);
+	dir = opendir(path);
+	if (!dir) {
+		*out_count = 0;
+		return NULL;
+	}
+
+	file_list = (char **)malloc(count * sizeof(char *));
+	if (!file_list) {
+		closedir(dir);
+		*out_count = 0;
+		return NULL;
+	}
+
+	while ((entry = readdir(dir)) != NULL && index < count) {
+		sprintf(full_path, "%s/%s", path, entry->d_name);
+		if (stat(full_path, &file_stat) != 0)
+			continue;
+
+		if (!S_ISREG(file_stat.st_mode))
+			continue;
+
+		file_list[index] = (char *)malloc(strlen(entry->d_name) + 1);
+		if (!file_list[index])
+			continue;
+
+		strcpy(file_list[index], entry->d_name);
+		++index;
+	}
+
+#elif defined(_WIN32)
+	return NULL;
+#else
+	return NULL;
+#endif
+	*out_count = index;
+	return file_list;
 }
