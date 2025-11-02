@@ -7,16 +7,15 @@ void *platform_get_symbol(void *handle, const char *symbol);
 
 typedef void (*stk_module_func)(void);
 
-char stk_mod_dir[MOD_DIR_BUFFER_SIZE];
 static void **stk_handles = NULL;
 static stk_module_func *stk_inits = NULL;
 static stk_module_func *stk_shutdowns = NULL;
 
-static size_t module_count = 0;
+size_t module_count = 0;
 
 size_t stk_module_count(void) { return module_count; }
 
-static int stk_module_load(const char *path)
+int stk_module_load(const char *path)
 {
 	void *handle;
 	stk_module_func init_func;
@@ -46,7 +45,7 @@ static int stk_module_load(const char *path)
 	return 0;
 }
 
-static void stk_module_unload(size_t index)
+void stk_module_unload(size_t index)
 {
 	size_t i;
 
@@ -62,11 +61,17 @@ static void stk_module_unload(size_t index)
 	--module_count;
 }
 
-static void stk_free_file_list(char **list, size_t count)
+void stk_module_unload_all(void)
 {
 	size_t i;
-	for (i = 0; i < count; ++i)
-		free(list[i]);
+	for (i = module_count; i > 0; --i)
+		stk_module_unload(i - 1);
 
-	free(list);
+	free(stk_handles);
+	free(stk_inits);
+	free(stk_shutdowns);
+
+	stk_handles = NULL;
+	stk_inits = NULL;
+	stk_shutdowns = NULL;
 }

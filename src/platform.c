@@ -1,3 +1,4 @@
+#include "stk.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +14,6 @@
 #endif
 
 #define EVENT_BUFFER_SIZE 4096
-#define PATH_BUFFER_SIZE 1024
 
 void *platform_load_library(const char *path)
 {

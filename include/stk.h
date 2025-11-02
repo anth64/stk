@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #define MOD_DIR_BUFFER_SIZE 32
+#define PATH_BUFFER_SIZE 1024
 
 #ifdef __cplusplus
 extern "C" {
