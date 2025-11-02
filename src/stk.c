@@ -1,7 +1,9 @@
 #include "stk.h"
 #include "stk_log.h"
 
-int stk_init(void)
+extern char *stk_mod_dir;
+
+int stk_init(const char *mod_dir)
 {
 	stk_log(stdout, "[stk] stk initialized v%s!", STK_VERSION_STRING);
 	return 0;

@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-int stk_init(void);
+int stk_init(const char *mod_dir);
 int stk_shutdown(void);
 
 size_t stk_module_count(void);
