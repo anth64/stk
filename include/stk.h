@@ -11,10 +11,18 @@
 extern "C" {
 #endif
 
+typedef enum {
+	STK_FILE_CREATED,
+	STK_FILE_MODIFIED,
+	STK_FILE_DELETED,
+	STK_FILE_RENAMED
+} stk_file_event_t;
+
 int stk_init(const char *mod_dir);
 int stk_shutdown(void);
-
 size_t stk_module_count(void);
+size_t stk_poll(void);
+
 #ifdef __cplusplus
 }
 #endif
