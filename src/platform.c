@@ -95,8 +95,11 @@ void platform_directory_watch_stop(void *handle)
 #endif
 }
 
-char **platform_directory_watch_check(void *handle, size_t *out_count)
+stk_file_event_t *platform_directory_watch_check(void *handle,
+						 char ***file_list,
+						 size_t *out_count)
 {
+	stk_file_event_t *events = NULL;
 #ifdef __linux__
 	int fd;
 	char buffer[EVENT_BUFFER_SIZE];
@@ -104,7 +107,6 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 	struct inotify_event *event;
 	char *event_ptr;
 	size_t file_count, index;
-	char **file_list;
 
 	fd = (int)(long)handle;
 	bytes_read = read(fd, buffer, sizeof(buffer));
@@ -128,8 +130,11 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 		return NULL;
 	}
 
-	file_list = malloc(file_count * sizeof(char *));
-	if (!file_list) {
+	events = malloc(file_count * sizeof(stk_file_event_t));
+	*file_list = malloc(file_count * sizeof(char *));
+	if (!events || !*file_list) {
+		free(events);
+		free(*file_list);
 		*out_count = 0;
 		return NULL;
 	}
@@ -139,9 +144,22 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 	while (event_ptr < buffer + bytes_read) {
 		event = (struct inotify_event *)event_ptr;
 		if (event->len > 0) {
-			file_list[index] = malloc(strlen(event->name) + 1);
-			if (file_list[index]) {
-				strcpy(file_list[index], event->name);
+			switch (event->mask) {
+			case IN_CREATE:
+			case IN_MOVED_TO:
+				events[index] = STK_FILE_CREATED;
+				break;
+			case IN_MODIFY:
+				events[index] = STK_FILE_MODIFIED;
+				break;
+			case IN_DELETE:
+			case IN_MOVED_FROM:
+				events[index] = STK_FILE_DELETED;
+				break;
+			}
+			(*file_list)[index] = malloc(strlen(event->name) + 1);
+			if ((*file_list)[index]) {
+				strcpy((*file_list)[index], event->name);
 				index++;
 			}
 		}
@@ -150,7 +168,7 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 	}
 
 	*out_count = index;
-	return file_list;
+	return events;
 #elif defined(_WIN32)
 	HANDLE h;
 	BYTE buffer[EVENT_BUFFER_SIZE];
@@ -190,8 +208,11 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 		return NULL;
 	}
 
-	file_list = malloc(file_count * sizeof(char *));
-	if (!file_list) {
+	events = malloc(file_count * sizeof(stk_file_event_t));
+	*file_list = malloc(file_count * sizeof(char *));
+	if (!events || !*file_list) {
+		free(events);
+		free(*file_list);
 		*out_count = 0;
 		return NULL;
 	}
@@ -201,18 +222,34 @@ char **platform_directory_watch_check(void *handle, size_t *out_count)
 	while (1) {
 		info = (FILE_NOTIFY_INFORMATION *)event_ptr;
 
+		switch (info->Action) {
+		case FILE_ACTION_ADDED:
+			events[index] = STK_FILE_CREATED;
+			break;
+		case FILE_ACTION_MODIFIED:
+			events[index] = STK_FILE_MODIFIED;
+			break;
+		case FILE_ACTION_REMOVED:
+			events[index] = STK_FILE_DELETED;
+			break;
+		case FILE_ACTION_RENAMED:
+			events[index] = STK_FILE_RENAMED;
+			break;
+		}
+
 		char_count = WideCharToMultiByte(
 		    CP_UTF8, 0, info->FileName,
 		    info->FileNameLength / sizeof(WCHAR), NULL, 0, NULL, NULL);
 
 		if (char_count > 0) {
-			file_list[index] = malloc(char_count + 1);
-			if (file_list[index]) {
-				WideCharToMultiByte(
-				    CP_UTF8, 0, info->FileName,
-				    info->FileNameLength / sizeof(WCHAR),
-				    file_list[index], char_count, NULL, NULL);
-				file_list[index][char_count] = '\0';
+			(file_list *)[index] = malloc(char_count + 1);
+			if ((*file_list)[index]) {
+				WideCharToMultiByte(CP_UTF8, 0, info->FileName,
+						    info->FileNameLength /
+							sizeof(WCHAR),
+						    (file_list *)[index],
+						    char_count, NULL, NULL);
+				(file_list *)[index][char_count] = '\0';
 				index++;
 			}
 		}
