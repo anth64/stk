@@ -175,7 +175,6 @@ stk_file_event_t *platform_directory_watch_check(void *handle,
 	DWORD bytes_returned;
 	FILE_NOTIFY_INFORMATION *info;
 	BYTE *event_ptr;
-	char **file_list;
 	size_t file_count, index;
 	int char_count;
 	BOOL result;
@@ -242,14 +241,14 @@ stk_file_event_t *platform_directory_watch_check(void *handle,
 		    info->FileNameLength / sizeof(WCHAR), NULL, 0, NULL, NULL);
 
 		if (char_count > 0) {
-			(file_list *)[index] = malloc(char_count + 1);
+			(*file_list)[index] = malloc(char_count + 1);
 			if ((*file_list)[index]) {
 				WideCharToMultiByte(CP_UTF8, 0, info->FileName,
 						    info->FileNameLength /
 							sizeof(WCHAR),
-						    (file_list *)[index],
+						    (*file_list)[index],
 						    char_count, NULL, NULL);
-				(file_list *)[index][char_count] = '\0';
+				(*file_list)[index][char_count] = '\0';
 				index++;
 			}
 		}
@@ -261,7 +260,7 @@ stk_file_event_t *platform_directory_watch_check(void *handle,
 	}
 
 	*out_count = index;
-	return file_list;
+	return events;
 #else
 	return NULL;
 #endif
