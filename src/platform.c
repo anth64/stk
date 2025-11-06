@@ -73,7 +73,7 @@ void *platform_directory_watch_start(const char *path)
 
 	return (void *)handle;
 #else
-	return NULL
+	return NULL;
 #endif
 }
 
@@ -99,6 +99,7 @@ stk_module_event_t *platform_directory_watch_check(void *handle,
 						   char ***file_list,
 						   size_t *out_count)
 {
+	size_t file_count = 0, index = 0;
 	stk_module_event_t *events = NULL;
 #ifdef __linux__
 	int fd;
@@ -106,7 +107,6 @@ stk_module_event_t *platform_directory_watch_check(void *handle,
 	ssize_t bytes_read;
 	struct inotify_event *event;
 	char *event_ptr;
-	size_t file_count, index;
 
 	fd = (int)(long)handle;
 	bytes_read = read(fd, buffer, sizeof(buffer));
@@ -157,16 +157,12 @@ stk_module_event_t *platform_directory_watch_check(void *handle,
 
 		event_ptr += sizeof(struct inotify_event) + event->len;
 	}
-
-	*out_count = index;
-	return events;
 #elif defined(_WIN32)
 	HANDLE h;
 	BYTE buffer[EVENT_BUFFER_SIZE];
 	DWORD bytes_returned;
 	FILE_NOTIFY_INFORMATION *info;
 	BYTE *event_ptr;
-	size_t file_count, index;
 	int char_count;
 	BOOL result;
 
@@ -198,7 +194,7 @@ stk_module_event_t *platform_directory_watch_check(void *handle,
 		return NULL;
 	}
 
-	events = malloc(file_count * sizeof(stk_file_event_t));
+	events = malloc(file_count * sizeof(stk_module_event_t));
 	*file_list = malloc(file_count * sizeof(char *));
 	if (!events || !*file_list) {
 		free(events);
@@ -211,22 +207,11 @@ stk_module_event_t *platform_directory_watch_check(void *handle,
 	event_ptr = buffer;
 	while (1) {
 		info = (FILE_NOTIFY_INFORMATION *)event_ptr;
-
-		switch (info->Action) {
-		case FILE_ACTION_ADDED:
-			events[index] = STK_FILE_CREATED;
-			break;
-		case FILE_ACTION_MODIFIED:
-			events[index] = STK_FILE_MODIFIED;
-			break;
-		case FILE_ACTION_REMOVED:
-			events[index] = STK_FILE_DELETED;
-			break;
-		case FILE_ACTION_RENAMED:
-			events[index] = STK_FILE_RENAMED;
-			break;
-		}
-
+		events[index] = (info->Action == FILE_ACTION_ADDED ||
+				 info->Action == FILE_ACTION_MODIFIED ||
+				 info->Action == FILE_ACTION_RENAMED_NEW_NAME)
+				    ? STK_MOD_LOAD
+				    : STK_MOD_UNLOAD;
 		char_count = WideCharToMultiByte(
 		    CP_UTF8, 0, info->FileName,
 		    info->FileNameLength / sizeof(WCHAR), NULL, 0, NULL, NULL);
@@ -249,12 +234,9 @@ stk_module_event_t *platform_directory_watch_check(void *handle,
 
 		event_ptr += info->NextEntryOffset;
 	}
-
+#endif
 	*out_count = index;
 	return events;
-#else
-	return NULL;
-#endif
 }
 
 char **platform_directory_init_scan(const char *path, size_t *out_count)
@@ -373,7 +355,6 @@ char **platform_directory_init_scan(const char *path, size_t *out_count)
 	FindClose(find_handle);
 
 #else
-	return NULL;
 #endif
 	*out_count = index;
 	return file_list;
