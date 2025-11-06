@@ -8,7 +8,7 @@ void *platform_get_symbol(void *handle, const char *symbol);
 
 typedef void (*stk_module_func)(void);
 
-static char **stk_module_ids = NULL;
+char **stk_module_ids = NULL;
 static void **stk_handles = NULL;
 static stk_module_func *stk_inits = NULL;
 static stk_module_func *stk_shutdowns = NULL;
