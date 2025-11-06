@@ -52,9 +52,9 @@ void *platform_directory_watch_start(const char *path)
 	if (fd < 0)
 		return NULL;
 
-	wd = inotify_add_watch(fd, path,
-			       IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_TO |
-				   IN_MOVED_FROM);
+	wd = inotify_add_watch(
+	    fd, path, IN_CLOSE_WRITE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM);
+
 	if (wd < 0) {
 		close(fd);
 		return NULL;
@@ -95,11 +95,11 @@ void platform_directory_watch_stop(void *handle)
 #endif
 }
 
-stk_file_event_t *platform_directory_watch_check(void *handle,
-						 char ***file_list,
-						 size_t *out_count)
+stk_module_event_t *platform_directory_watch_check(void *handle,
+						   char ***file_list,
+						   size_t *out_count)
 {
-	stk_file_event_t *events = NULL;
+	stk_module_event_t *events = NULL;
 #ifdef __linux__
 	int fd;
 	char buffer[EVENT_BUFFER_SIZE];
@@ -130,7 +130,7 @@ stk_file_event_t *platform_directory_watch_check(void *handle,
 		return NULL;
 	}
 
-	events = malloc(file_count * sizeof(stk_file_event_t));
+	events = malloc(file_count * sizeof(stk_module_event_t));
 	*file_list = malloc(file_count * sizeof(char *));
 	if (!events || !*file_list) {
 		free(events);
@@ -144,19 +144,10 @@ stk_file_event_t *platform_directory_watch_check(void *handle,
 	while (event_ptr < buffer + bytes_read) {
 		event = (struct inotify_event *)event_ptr;
 		if (event->len > 0) {
-			switch (event->mask) {
-			case IN_CREATE:
-			case IN_MOVED_TO:
-				events[index] = STK_FILE_CREATED;
-				break;
-			case IN_MODIFY:
-				events[index] = STK_FILE_MODIFIED;
-				break;
-			case IN_DELETE:
-			case IN_MOVED_FROM:
-				events[index] = STK_FILE_DELETED;
-				break;
-			}
+			events[index] =
+			    (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO))
+				? STK_MOD_LOAD
+				: STK_MOD_UNLOAD;
 			(*file_list)[index] = malloc(strlen(event->name) + 1);
 			if ((*file_list)[index]) {
 				strcpy((*file_list)[index], event->name);
