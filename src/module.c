@@ -17,7 +17,7 @@ size_t module_count = 0;
 
 size_t stk_module_count(void) { return module_count; }
 
-char *extract_module_id(const char *path)
+static char *extract_module_id(const char *path)
 {
 	char *id, *dot;
 	const char *basename = strrchr(path, '/');
