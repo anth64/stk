@@ -52,12 +52,13 @@ int stk_init(const char *mod_dir)
 
 scanned:
 	watch_handle = platform_directory_watch_start(stk_mod_dir);
-	stk_log(stdout, "[stk] stk v%s initialized! Loaded %zu mods from %s",
-		STK_VERSION_STRING, module_count, stk_mod_dir);
+	stk_log(stdout, "[stk] stk v%s initialized! Loaded %zu mod%s from %s/",
+		STK_VERSION_STRING, module_count, module_count > 1 ? "s" : "",
+		stk_mod_dir);
 	return 0;
 }
 
-int stk_shutdown(void)
+void stk_shutdown(void)
 {
 	if (watch_handle) {
 		platform_directory_watch_stop(watch_handle);
@@ -67,7 +68,6 @@ int stk_shutdown(void)
 	stk_module_unload_all();
 
 	stk_log(stdout, "[stk] stk shutdown");
-	return 0;
 }
 
 size_t stk_poll(void)
@@ -85,16 +85,24 @@ size_t stk_poll(void)
 	for (i = 0; i < file_count; ++i) {
 		char full_path[PATH_BUFFER_SIZE];
 		char *module_id;
+		int existing_index = -1;
+		size_t j = 0;
 
 		module_id = file_list[i];
 		sprintf(full_path, "%s/%s", stk_mod_dir, module_id);
 
+		for (j = 0; j < module_count; ++j) {
+			if (strcmp(module_id, stk_module_ids[j]) != 0)
+				continue;
+
+			existing_index = j;
+			break;
+		}
+
 		switch (events[i]) {
 		case STK_MOD_LOAD:
-			stk_log(stdout, "[stk] STK_MOD_LOAD %s", module_id);
 			break;
 		case STK_MOD_UNLOAD:
-			stk_log(stdout, "[stk] STK_MOD_UNLOAD %s", module_id);
 			break;
 		}
 	}

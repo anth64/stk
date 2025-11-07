@@ -14,7 +14,7 @@ extern "C" {
 typedef enum { STK_MOD_LOAD, STK_MOD_UNLOAD } stk_module_event_t;
 
 int stk_init(const char *mod_dir);
-int stk_shutdown(void);
+void stk_shutdown(void);
 size_t stk_module_count(void);
 size_t stk_poll(void);
 
