@@ -47,7 +47,7 @@
 - WASM modules as an alternative backend.
 - Multi-language support (Rust, Go, Zig, etc.).
 - WASM runtime optional, old or retro hardware can ignore it.
-- Sandbox and safety checks for WASM modules.  
+- Sandbox and safety checks for WASM modules.
 
 ---
 
