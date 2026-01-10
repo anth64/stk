@@ -10,7 +10,7 @@ OBJS_DEBUG := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/debug/%.o,$(SRCS))
 OBJS_RELEASE := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/release/%.o,$(SRCS))
 
 # Compiler and flags
-CC := gcc
+CC := cc
 CFLAGS_DEBUG := -g -O0 -Wall -Wpedantic -I$(INC_DIR) -std=c89
 CFLAGS_RELEASE := -O2 -Wall -Wpedantic -I$(INC_DIR) -std=c89
 
