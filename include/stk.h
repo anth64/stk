@@ -11,7 +11,11 @@
 extern "C" {
 #endif
 
-typedef enum { STK_MOD_LOAD, STK_MOD_UNLOAD } stk_module_event_t;
+typedef enum {
+	STK_MOD_LOAD,
+	STK_MOD_UNLOAD,
+	STK_MOD_RELOAD
+} stk_module_event_t;
 
 int stk_init(const char *mod_dir);
 void stk_shutdown(void);
