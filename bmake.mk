@@ -37,4 +37,4 @@ obj/release/${_src:T:R}.o: ${_src}
 .dinclude "obj/release/*.d"
 
 clean:
-	rm -rf ${OBJ_DIR} ${BIN_DIR}
+	rm -rf ${.CURDIR}/${OBJ_DIR} ${.CURDIR}/${BIN_DIR}
