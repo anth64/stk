@@ -8,14 +8,7 @@ CFLAGS_DEBUG = -g -O0 -Wall -Wpedantic -I$(INC_DIR) -std=c89 -fPIC
 CFLAGS_RELEASE = -O2 -Wall -Wpedantic -I$(INC_DIR) -std=c89 -fPIC
 LDFLAGS = -ldl
 
-<<<<<<< HEAD
-# Compiler and flags
-CC := cc
-CFLAGS_DEBUG := -g -O0 -Wall -Wpedantic -I$(INC_DIR) -std=c89
-CFLAGS_RELEASE := -O2 -Wall -Wpedantic -I$(INC_DIR) -std=c89
-=======
 LIB_NAME = libstk.so
->>>>>>> 9712d47 ('simplify' make file to work across gmake and bmake)
 
 OBJS_DEBUG = \
 	$(OBJ_DIR)/debug/module.o \
