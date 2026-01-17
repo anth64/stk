@@ -4,8 +4,10 @@
 #include "stk_version.h"
 #include <stdlib.h>
 
-#define MOD_DIR_BUFFER_SIZE 32
-#define PATH_BUFFER_SIZE 1024
+#define STK_MOD_DIR_BUFFER 256
+#define STK_MOD_ID_BUFFER 64
+#define STK_PATH_MAX 256
+#define STK_PATH_MAX_OS 4096
 
 #ifdef __cplusplus
 extern "C" {

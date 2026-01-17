@@ -8,39 +8,23 @@ void *platform_get_symbol(void *handle, const char *symbol);
 
 typedef void (*stk_module_func)(void);
 
-char **stk_module_ids = NULL;
-static void **stk_handles = NULL;
-static stk_module_func *stk_inits = NULL;
-static stk_module_func *stk_shutdowns = NULL;
+char (*stk_module_ids)[STK_MOD_ID_BUFFER] = NULL;
+void **stk_handles = NULL;
+stk_module_func *stk_inits = NULL;
+stk_module_func *stk_shutdowns = NULL;
 
 size_t module_count = 0;
 
 size_t stk_module_count(void) { return module_count; }
 
-char *extract_module_id(const char *path)
-{
-	char *id, *dot;
-	const char *basename = strrchr(path, '/');
-	if (!basename)
-		basename = path;
-	else
-		basename++;
-
-	id = malloc(strlen(basename) + 1);
-	strcpy(id, basename);
-
-	dot = strrchr(id, '.');
-	if (dot)
-		*dot = '\0';
-
-	return id;
-}
-
-int stk_module_load(const char *path)
+int stk_module_load(const char *path, int index)
 {
 	void *handle;
 	stk_module_func init_func;
 	stk_module_func shutdown_func;
+	const char *basename;
+	char *dot;
+	char module_id[STK_MOD_ID_BUFFER];
 
 	handle = platform_load_library(path);
 	if (!handle)
@@ -56,32 +40,49 @@ int stk_module_load(const char *path)
 		return -2;
 	}
 
-	stk_module_ids[module_count] = extract_module_id(path);
-	stk_handles[module_count] = handle;
-	stk_inits[module_count] = init_func;
-	stk_shutdowns[module_count] = shutdown_func;
+	if (index == -1)
+		index = module_count;
 
-	init_func();
+	basename = strrchr(path, '/');
+	if (!basename)
+		basename = path;
+	else
+		basename++;
 
-	++module_count;
+	strncpy(module_id, basename, STK_MOD_ID_BUFFER - 1);
+	module_id[STK_MOD_ID_BUFFER - 1] = '\0';
+
+	dot = strrchr(module_id, '.');
+	if (dot)
+		*dot = '\0';
+
+	strncpy(stk_module_ids[index], module_id, STK_MOD_ID_BUFFER - 1);
+	stk_module_ids[index][STK_MOD_ID_BUFFER - 1] = '\0';
+
+	stk_handles[index] = handle;
+	stk_inits[index] = init_func;
+	stk_shutdowns[index] = shutdown_func;
+
+	init_func(); /* TODO eventually, this should have some sort of check */
+
 	return 0;
+}
+
+int stk_module_load_init(const char *path, int index)
+{
+	int result;
+	result = stk_module_load(path, index);
+
+	if (result == 0)
+		++module_count;
+
+	return result;
 }
 
 void stk_module_unload(size_t index)
 {
-	size_t i;
-
 	stk_shutdowns[index]();
 	platform_unload_library(stk_handles[index]);
-
-	for (i = index; i < module_count - 1; ++i) {
-		stk_module_ids[i] = stk_module_ids[i + 1];
-		stk_handles[i] = stk_handles[i + 1];
-		stk_inits[i] = stk_inits[i + 1];
-		stk_shutdowns[i] = stk_shutdowns[i + 1];
-	}
-
-	--module_count;
 }
 
 void stk_module_free_memory(void)
@@ -99,12 +100,12 @@ void stk_module_free_memory(void)
 
 int stk_module_init_memory(size_t capacity)
 {
-	stk_module_ids = malloc(capacity * sizeof(char *));
+	stk_module_ids = malloc(capacity * sizeof(*stk_module_ids));
 	stk_handles = malloc(capacity * sizeof(void *));
 	stk_inits = malloc(capacity * sizeof(stk_module_func));
 	stk_shutdowns = malloc(capacity * sizeof(stk_module_func));
 
-	if (!stk_handles || !stk_inits || !stk_shutdowns) {
+	if (!stk_module_ids || !stk_handles || !stk_inits || !stk_shutdowns) {
 		stk_module_free_memory();
 		return -1;
 	}

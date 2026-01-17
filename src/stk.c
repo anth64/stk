@@ -1,35 +1,45 @@
 #include "stk.h"
 #include "stk_log.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-extern char **stk_module_ids;
+typedef void (*stk_module_func)(void);
+
+extern void **stk_handles;
+extern stk_module_func *stk_inits;
+extern stk_module_func *stk_shutdowns;
+extern char (*stk_module_ids)[STK_MOD_ID_BUFFER];
+
 extern size_t module_count;
 
-static char stk_mod_dir[MOD_DIR_BUFFER_SIZE];
+static char stk_mod_dir[STK_MOD_DIR_BUFFER];
 static void *watch_handle = NULL;
 
-char **platform_directory_init_scan(const char *path, size_t *out_count);
+char *extract_module_id(const char *path);
+char (*platform_directory_init_scan(const char *path,
+				    size_t *out_count))[STK_PATH_MAX];
 void *platform_directory_watch_start(const char *path);
 void platform_directory_watch_stop(void *handle);
 size_t stk_module_count(void);
-int stk_module_load(const char *path);
+int stk_module_load(const char *path, int index);
+int stk_module_load_init(const char *path, int index);
 void stk_module_unload(size_t index);
 void stk_module_unload_all(void);
 int stk_module_init_memory(size_t capacity);
-stk_module_event_t *platform_directory_watch_check(void *handle,
-						   char ***file_list,
-						   size_t *out_count);
+stk_module_event_t *platform_directory_watch_check(
+    void *handle, char (**file_list)[STK_PATH_MAX], size_t *out_count,
+    char (*loaded_module_ids)[STK_MOD_ID_BUFFER], const size_t loaded_count);
 
 int stk_init(const char *mod_dir)
 {
-	char **files;
+	char(*files)[STK_PATH_MAX] = NULL;
 	size_t file_count, i;
-	char full_path[PATH_BUFFER_SIZE];
+	char full_path[STK_PATH_MAX_OS];
 
 	if (mod_dir) {
-		strncpy(stk_mod_dir, mod_dir, MOD_DIR_BUFFER_SIZE - 1);
-		stk_mod_dir[MOD_DIR_BUFFER_SIZE - 1] = '\0';
+		strncpy(stk_mod_dir, mod_dir, STK_MOD_DIR_BUFFER - 1);
+		stk_mod_dir[STK_MOD_DIR_BUFFER - 1] = '\0';
 	} else {
 		strcpy(stk_mod_dir, "mods");
 	}
@@ -44,8 +54,7 @@ int stk_init(const char *mod_dir)
 
 	for (i = 0; i < file_count; ++i) {
 		sprintf(full_path, "%s/%s", stk_mod_dir, files[i]);
-		stk_module_load(full_path);
-		free(files[i]);
+		stk_module_load_init(full_path, i);
 	}
 
 	free(files);
@@ -72,34 +81,20 @@ void stk_shutdown(void)
 
 size_t stk_poll(void)
 {
-	char **file_list = NULL;
+	char(*file_list)[STK_PATH_MAX] = NULL;
 	stk_module_event_t *events = NULL;
-	size_t file_count;
-	size_t i;
+	size_t file_count, i;
 
 	events = platform_directory_watch_check(watch_handle, &file_list,
-						&file_count);
+						&file_count, stk_module_ids,
+						module_count);
 	if (!events)
 		return 0;
 
 	for (i = 0; i < file_count; ++i) {
-		char full_path[PATH_BUFFER_SIZE];
-		char *module_id;
-		int existing_index = -1;
-		size_t j = 0;
-
-		module_id = file_list[i];
-		sprintf(full_path, "%s/%s", stk_mod_dir, module_id);
-
-		for (j = 0; j < module_count; ++j) {
-			if (strcmp(module_id, stk_module_ids[j]) != 0)
-				continue;
-
-			existing_index = j;
-			break;
-		}
-
 		switch (events[i]) {
+		case STK_MOD_RELOAD:
+			break;
 		case STK_MOD_LOAD:
 			break;
 		case STK_MOD_UNLOAD:
@@ -107,11 +102,8 @@ size_t stk_poll(void)
 		}
 	}
 
-	for (i = 0; i < file_count; i++)
-		free(file_list[i]);
-
-	free(file_list);
 	free(events);
+	free(file_list);
 
 	return file_count;
 }
