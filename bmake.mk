@@ -1,9 +1,16 @@
 .include "config.mk"
 
+UNAME_S != uname -s
+
+.if ${UNAME_S} == "Darwin"
+FULL_LIB     = lib${LIB_NAME}.dylib
+.else
 FULL_LIB     = lib${LIB_NAME}.so
+.endif
+
 LDFLAGS_PLAT = -ldl
 CFLAGS_PLAT  = -fPIC
-CFLAGS_BASE  = -Wall -Wpedantic -I${INC_DIR} -std=c89 ${CFLAGS_PLAT}
+CFLAGS_BASE  = -Wall -Wpedantic -I${.CURDIR}/${INC_DIR} -std=c89 ${CFLAGS_PLAT}
 
 .PHONY: all debug release clean
 
@@ -24,17 +31,19 @@ ${BIN_DIR}/release/${FULL_LIB}: ${OBJS_RELEASE}
 	${CC} -shared -o ${.TARGET} ${.ALLSRC} ${LDFLAGS_PLAT}
 
 .for _src in ${SRCS}
-obj/debug/${_src:T:R}.o: ${_src}
-	@mkdir -p ${.TARGET:H}
-	${CC} ${CFLAGS_BASE} -g -O0 -MMD -MP -c ${_src} -o ${.TARGET}
+_obj_base = ${_src:S/^src\///:S/.c$/.o/}
 
-obj/release/${_src:T:R}.o: ${_src}
+obj/debug/${_obj_base}: ${_src}
 	@mkdir -p ${.TARGET:H}
-	${CC} ${CFLAGS_BASE} -O2 -MMD -MP -c ${_src} -o ${.TARGET}
+	${CC} ${CFLAGS_BASE} -g -O0 -MMD -MP -c ${.ALLSRC} -o ${.TARGET}
+
+obj/release/${_obj_base}: ${_src}
+	@mkdir -p ${.TARGET:H}
+	${CC} ${CFLAGS_BASE} -O2 -MMD -MP -c ${.ALLSRC} -o ${.TARGET}
 .endfor
 
-.dinclude "obj/debug/*.d"
-.dinclude "obj/release/*.d"
+.-include "obj/debug/*.d"
+.-include "obj/release/*.d"
 
 clean:
 	rm -rf ${.CURDIR}/${OBJ_DIR} ${.CURDIR}/${BIN_DIR}
