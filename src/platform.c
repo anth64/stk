@@ -86,6 +86,112 @@ static uint8_t is_module_loaded(const char *filename,
 	return 0;
 }
 
+int platform_mkdir(const char *path)
+{
+#ifdef _WIN32
+	return CreateDirectoryA(path, NULL) ? 0 : -1;
+#else
+	return mkdir(path, 0755);
+#endif
+}
+
+int platform_remove_file(const char *path)
+{
+#ifdef _WIN32
+	return DeleteFileA(path) ? 0 : -1;
+#else
+	return unlink(path);
+#endif
+}
+
+int platform_copy_file(const char *from, const char *to)
+{
+#ifdef _WIN32
+	return CopyFileA(from, to, FALSE) ? 0 : -1;
+#else
+	FILE *src, *dst;
+	char buffer[STK_PATH_MAX];
+	size_t bytes;
+	int result = 0;
+
+	src = fopen(from, "rb");
+	if (!src)
+		return -1;
+
+	dst = fopen(to, "wb");
+	if (!dst) {
+		fclose(src);
+		return -1;
+	}
+
+	while ((bytes = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+		if (fwrite(buffer, 1, bytes, dst) != bytes) {
+			result = -1;
+			break;
+		}
+	}
+
+	fclose(src);
+	fclose(dst);
+	return result;
+#endif
+}
+
+int platform_remove_dir(const char *path)
+{
+#ifdef _WIN32
+	WIN32_FIND_DATAW find_data;
+	HANDLE find_handle;
+	WCHAR search_path[STK_PATH_MAX_OS];
+	char temp_filename[STK_PATH_MAX];
+	int len;
+
+	swprintf(search_path, STK_PATH_MAX_OS, L"%S\\*", path);
+	find_handle = FindFirstFileW(search_path, &find_data);
+
+	if (find_handle != INVALID_HANDLE_VALUE) {
+		do {
+			if (find_data.dwFileAttributes &
+			    FILE_ATTRIBUTE_DIRECTORY)
+				continue;
+
+			len = WideCharToMultiByte(
+			    CP_UTF8, 0, find_data.cFileName, -1, temp_filename,
+			    STK_PATH_MAX - 1, NULL, NULL);
+			if (len > 0) {
+				char full_path[STK_PATH_MAX_OS];
+				snprintf(full_path, sizeof(full_path), "%s\\%s",
+					 path, temp_filename);
+				DeleteFileA(full_path);
+			}
+		} while (FindNextFileW(find_handle, &find_data));
+		FindClose(find_handle);
+	}
+
+	return RemoveDirectoryA(path) ? 0 : -1;
+#else
+	DIR *dir;
+	struct dirent *entry;
+	char filepath[STK_PATH_MAX_OS];
+
+	dir = opendir(path);
+	if (!dir)
+		return -1;
+
+	while ((entry = readdir(dir)) != NULL) {
+		if (strcmp(entry->d_name, ".") == 0 ||
+		    strcmp(entry->d_name, "..") == 0)
+			continue;
+
+		sprintf(filepath, "%s/%s", path, entry->d_name);
+		unlink(filepath);
+	}
+
+	closedir(dir);
+	return rmdir(path);
+#endif
+}
+
 #if !defined(__linux__) && !defined(_WIN32)
 typedef struct {
 	char filename[STK_PATH_MAX];
@@ -96,6 +202,8 @@ typedef struct {
 	int kq;
 	int dir_fd;
 	char path[STK_PATH_MAX];
+	int *file_fds;
+	size_t file_fd_count;
 	file_snapshot_t *snapshots;
 	size_t snapshot_count;
 	size_t snapshot_capacity;
@@ -144,7 +252,7 @@ static file_snapshot_t *create_snapshot(const char *path, size_t *out_count,
 		return NULL;
 	}
 
-	capacity = count + 8;
+	capacity = count;
 	snapshots = malloc(capacity * sizeof(file_snapshot_t));
 	if (!snapshots) {
 		closedir(dir);
@@ -191,6 +299,83 @@ static file_snapshot_t *find_in_snapshot(file_snapshot_t *snapshots,
 		}
 	}
 	return NULL;
+}
+
+static void setup_file_watches(kqueue_watch_context_t *ctx)
+{
+	DIR *dir;
+	struct dirent *entry;
+	char filepath[STK_PATH_MAX_OS];
+	struct kevent event;
+	size_t idx;
+	int fd;
+
+	dir = opendir(ctx->path);
+	if (!dir)
+		return;
+
+	ctx->file_fd_count = 0;
+	while ((entry = readdir(dir)) != NULL) {
+		if (is_valid_module_file(entry->d_name))
+			ctx->file_fd_count++;
+	}
+
+	if (ctx->file_fd_count == 0) {
+		closedir(dir);
+		ctx->file_fds = NULL;
+		return;
+	}
+
+	ctx->file_fds = malloc(ctx->file_fd_count * sizeof(int));
+	if (!ctx->file_fds) {
+		closedir(dir);
+		ctx->file_fd_count = 0;
+		return;
+	}
+
+	rewinddir(dir);
+	idx = 0;
+
+	while ((entry = readdir(dir)) != NULL && idx < ctx->file_fd_count) {
+		if (!is_valid_module_file(entry->d_name))
+			continue;
+
+		sprintf(filepath, "%s/%s", ctx->path, entry->d_name);
+		fd = open(filepath, O_RDONLY);
+		if (fd >= 0) {
+			ctx->file_fds[idx++] = fd;
+			EV_SET(&event, fd, EVFILT_VNODE,
+			       EV_ADD | EV_ENABLE | EV_CLEAR,
+			       NOTE_WRITE | NOTE_DELETE | NOTE_ATTRIB, 0, NULL);
+			kevent(ctx->kq, &event, 1, NULL, 0, NULL);
+		}
+	}
+
+	ctx->file_fd_count = idx;
+	closedir(dir);
+}
+
+static void cleanup_file_watches(kqueue_watch_context_t *ctx)
+{
+	size_t i;
+
+	if (!ctx->file_fds)
+		return;
+
+	for (i = 0; i < ctx->file_fd_count; i++) {
+		if (ctx->file_fds[i] >= 0)
+			close(ctx->file_fds[i]);
+	}
+
+	free(ctx->file_fds);
+	ctx->file_fds = NULL;
+	ctx->file_fd_count = 0;
+}
+
+static void refresh_file_watches(kqueue_watch_context_t *ctx)
+{
+	cleanup_file_watches(ctx);
+	setup_file_watches(ctx);
 }
 #endif
 
@@ -253,6 +438,8 @@ void *platform_directory_watch_start(const char *path)
 	ctx->dir_fd = open(path, O_RDONLY);
 	strncpy(ctx->path, path, STK_PATH_MAX - 1);
 	ctx->path[STK_PATH_MAX - 1] = '\0';
+	ctx->file_fds = NULL;
+	ctx->file_fd_count = 0;
 	ctx->snapshots = create_snapshot(path, &ctx->snapshot_count,
 					 &ctx->snapshot_capacity);
 
@@ -269,6 +456,9 @@ void *platform_directory_watch_start(const char *path)
 	EV_SET(&event, ctx->dir_fd, EVFILT_VNODE, EV_ADD | EV_ENABLE | EV_CLEAR,
 	       NOTE_WRITE | NOTE_DELETE | NOTE_RENAME, 0, NULL);
 	kevent(ctx->kq, &event, 1, NULL, 0, NULL);
+
+	setup_file_watches(ctx);
+
 	return (void *)ctx;
 #endif
 }
@@ -286,6 +476,7 @@ void platform_directory_watch_stop(void *handle)
 	ctx = (kqueue_watch_context_t *)handle;
 	if (!ctx)
 		return;
+	cleanup_file_watches(ctx);
 	if (ctx->dir_fd >= 0)
 		close(ctx->dir_fd);
 	if (ctx->kq >= 0)
@@ -433,17 +624,19 @@ stk_module_event_t *platform_directory_watch_check(
 	}
 #else
 	kqueue_watch_context_t *ctx;
-	struct kevent event;
+	struct kevent events_buf[64];
 	struct timespec timeout;
 	file_snapshot_t *new_snapshots, *old_snap;
 	size_t new_count, new_capacity, i, change_count;
+	int nevents;
 
 	ctx = (kqueue_watch_context_t *)handle;
 	timeout.tv_sec = 0;
 	timeout.tv_nsec = 0;
 	change_count = 0;
 
-	if (kevent(ctx->kq, NULL, 0, &event, 1, &timeout) <= 0) {
+	nevents = kevent(ctx->kq, NULL, 0, events_buf, 64, &timeout);
+	if (nevents <= 0) {
 		*out_count = 0;
 		return NULL;
 	}
@@ -504,122 +697,123 @@ stk_module_event_t *platform_directory_watch_check(
 	ctx->snapshots = new_snapshots;
 	ctx->snapshot_count = new_count;
 	ctx->snapshot_capacity = new_capacity;
+
+	refresh_file_watches(ctx);
 #endif
 	*out_count = index;
 	return events;
 }
 
-char (*platform_directory_init_scan(const char *mod_dir,
-				    size_t *out_count))[STK_PATH_MAX]
-{
-	char(*file_list)[STK_PATH_MAX] = NULL;
-	char work_path[STK_PATH_MAX_OS];
-	size_t count = 0, index = 0;
+char (*platform_directory_init_scan(const char *mod_dir, size_t *out_count))
+    [STK_PATH_MAX] {
+	    char (*file_list)[STK_PATH_MAX] = NULL;
+	    char work_path[STK_PATH_MAX_OS];
+	    size_t count = 0, index = 0;
 
 #if defined(_WIN32)
-	WIN32_FIND_DATAW find_data;
-	HANDLE find_handle;
-	WCHAR search_path[STK_PATH_MAX_OS];
-	char temp_filename[STK_PATH_MAX];
-	int len;
+	    WIN32_FIND_DATAW find_data;
+	    HANDLE find_handle;
+	    WCHAR search_path[STK_PATH_MAX_OS];
+	    char temp_filename[STK_PATH_MAX];
+	    int len;
 
-	swprintf(search_path, STK_PATH_MAX_OS, L"%S\\*", mod_dir);
-	find_handle = FindFirstFileW(search_path, &find_data);
+	    swprintf(search_path, STK_PATH_MAX_OS, L"%S\\*", mod_dir);
+	    find_handle = FindFirstFileW(search_path, &find_data);
 
-	if (find_handle == INVALID_HANDLE_VALUE) {
-		CreateDirectoryA(mod_dir, NULL);
-		*out_count = 0;
-		return NULL;
-	}
+	    if (find_handle == INVALID_HANDLE_VALUE) {
+		    CreateDirectoryA(mod_dir, NULL);
+		    *out_count = 0;
+		    return NULL;
+	    }
 
-	do {
-		if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			continue;
+	    do {
+		    if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			    continue;
 
-		len = WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName, -1,
-					  temp_filename, STK_PATH_MAX - 1, NULL,
-					  NULL);
-		if (len > 0) {
-			temp_filename[len] = '\0';
-			if (is_valid_module_file(temp_filename))
-				count++;
-		}
-	} while (FindNextFileW(find_handle, &find_data));
-	FindClose(find_handle);
+		    len = WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName,
+					      -1, temp_filename,
+					      STK_PATH_MAX - 1, NULL, NULL);
+		    if (len > 0) {
+			    temp_filename[len] = '\0';
+			    if (is_valid_module_file(temp_filename))
+				    count++;
+		    }
+	    } while (FindNextFileW(find_handle, &find_data));
+	    FindClose(find_handle);
 
-	if (count == 0) {
-		*out_count = 0;
-		return NULL;
-	}
+	    if (count == 0) {
+		    *out_count = 0;
+		    return NULL;
+	    }
 
-	find_handle = FindFirstFileW(search_path, &find_data);
-	file_list = malloc(count * sizeof(*file_list));
+	    find_handle = FindFirstFileW(search_path, &find_data);
+	    file_list = malloc(count * sizeof(*file_list));
 
-	do {
-		if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			continue;
+	    do {
+		    if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			    continue;
 
-		len = WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName, -1,
-					  file_list[index], STK_PATH_MAX - 1,
-					  NULL, NULL);
-		if (len > 0 && index < count) {
-			file_list[index][len] = '\0';
-			if (is_valid_module_file(file_list[index]))
-				index++;
-		}
-	} while (FindNextFileW(find_handle, &find_data) && index < count);
-	FindClose(find_handle);
+		    len = WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName,
+					      -1, file_list[index],
+					      STK_PATH_MAX - 1, NULL, NULL);
+		    if (len > 0 && index < count) {
+			    file_list[index][len] = '\0';
+			    if (is_valid_module_file(file_list[index]))
+				    index++;
+		    }
+	    } while (FindNextFileW(find_handle, &find_data) && index < count);
+	    FindClose(find_handle);
 #else
-	DIR *dir;
-	struct dirent *entry;
-	struct stat file_stat;
+	    DIR *dir;
+	    struct dirent *entry;
+	    struct stat file_stat;
 
-	dir = opendir(mod_dir);
-	if (!dir) {
-		mkdir(mod_dir, 0755);
-		*out_count = 0;
-		return NULL;
-	}
+	    dir = opendir(mod_dir);
+	    if (!dir) {
+		    mkdir(mod_dir, 0755);
+		    *out_count = 0;
+		    return NULL;
+	    }
 
-	while ((entry = readdir(dir)) != NULL) {
-		if (!is_valid_module_file(entry->d_name))
-			continue;
+	    while ((entry = readdir(dir)) != NULL) {
+		    if (!is_valid_module_file(entry->d_name))
+			    continue;
 
-		sprintf(work_path, "%s/%s", mod_dir, entry->d_name);
-		if (stat(work_path, &file_stat) == 0 &&
-		    S_ISREG(file_stat.st_mode))
-			count++;
-	}
+		    sprintf(work_path, "%s/%s", mod_dir, entry->d_name);
+		    if (stat(work_path, &file_stat) == 0 &&
+			S_ISREG(file_stat.st_mode))
+			    count++;
+	    }
 
-	if (count == 0) {
-		closedir(dir);
-		*out_count = 0;
-		return NULL;
-	}
+	    if (count == 0) {
+		    closedir(dir);
+		    *out_count = 0;
+		    return NULL;
+	    }
 
-	rewinddir(dir);
-	file_list = malloc(count * sizeof(*file_list));
-	if (!file_list) {
-		closedir(dir);
-		*out_count = 0;
-		return NULL;
-	}
+	    rewinddir(dir);
+	    file_list = malloc(count * sizeof(*file_list));
+	    if (!file_list) {
+		    closedir(dir);
+		    *out_count = 0;
+		    return NULL;
+	    }
 
-	while ((entry = readdir(dir)) != NULL && index < count) {
-		if (!is_valid_module_file(entry->d_name))
-			continue;
+	    while ((entry = readdir(dir)) != NULL && index < count) {
+		    if (!is_valid_module_file(entry->d_name))
+			    continue;
 
-		sprintf(work_path, "%s/%s", mod_dir, entry->d_name);
-		if (stat(work_path, &file_stat) != 0 ||
-		    !S_ISREG(file_stat.st_mode))
-			continue;
+		    sprintf(work_path, "%s/%s", mod_dir, entry->d_name);
+		    if (stat(work_path, &file_stat) != 0 ||
+			!S_ISREG(file_stat.st_mode))
+			    continue;
 
-		strncpy(file_list[index], entry->d_name, STK_PATH_MAX - 1);
-		file_list[index][STK_PATH_MAX - 1] = '\0';
-		index++;
-	}
-	closedir(dir);
+		    strncpy(file_list[index], entry->d_name, STK_PATH_MAX - 1);
+		    file_list[index][STK_PATH_MAX - 1] = '\0';
+		    index++;
+	    }
+	    closedir(dir);
 #endif
-	*out_count = index;
-	return file_list;
-}
+	    *out_count = index;
+	    return file_list;
+    }

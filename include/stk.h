@@ -19,7 +19,7 @@ typedef enum {
 	STK_MOD_RELOAD
 } stk_module_event_t;
 
-int stk_init(const char *mod_dir);
+int stk_init(const char *mod_dir, const char *tmp_dir);
 void stk_shutdown(void);
 size_t stk_module_count(void);
 size_t stk_poll(void);
