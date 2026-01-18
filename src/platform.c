@@ -22,9 +22,9 @@
 #include <unistd.h>
 #endif
 
-uint8_t is_module_loaded(const char *filename,
-			 char (*loaded_module_ids)[STK_MOD_ID_BUFFER],
-			 size_t loaded_count);
+int is_module_loaded(const char *filename,
+		     char (*loaded_module_ids)[STK_MOD_ID_BUFFER],
+		     size_t loaded_count);
 uint8_t is_valid_module_file(const char *filename);
 
 int platform_mkdir(const char *path)
