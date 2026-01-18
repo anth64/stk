@@ -1,4 +1,5 @@
 #include "stk.h"
+#include <bits/stdint-uintn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,69 +23,10 @@
 #include <unistd.h>
 #endif
 
-#if defined(__linux__) || defined(_WIN32)
-#define STK_EVENT_BUFFER 4096
-#endif
-
-#if defined(_WIN32)
-#define STK_MODULE_EXT ".dll"
-#elif defined(__APPLE__)
-#define STK_MODULE_EXT ".dylib"
-#else
-#define STK_MODULE_EXT ".so"
-#endif
-
-#define STK_MODULE_EXT_LEN (sizeof(STK_MODULE_EXT) - 1)
-
-static uint8_t is_valid_module_file(const char *filename)
-{
-	const char *ext;
-	size_t name_len;
-
-	if (!filename)
-		return 0;
-
-	name_len = strlen(filename);
-
-	if (name_len <= STK_MODULE_EXT_LEN)
-		return 0;
-
-	ext = filename + (name_len - STK_MODULE_EXT_LEN);
-	return strcmp(ext, STK_MODULE_EXT) == 0;
-}
-
-static uint8_t is_module_loaded(const char *filename,
-				char (*loaded_module_ids)[STK_MOD_ID_BUFFER],
-				size_t loaded_count)
-{
-	char module_id[STK_MOD_ID_BUFFER];
-	const char *basename;
-	char *dot;
-	size_t i;
-
-	basename = strrchr(filename, '/');
-#ifdef _WIN32
-	if (!basename)
-		basename = strrchr(filename, '\\');
-#endif
-	if (!basename)
-		basename = filename;
-	else
-		basename++;
-
-	strncpy(module_id, basename, STK_MOD_ID_BUFFER - 1);
-	module_id[STK_MOD_ID_BUFFER - 1] = '\0';
-
-	dot = strrchr(module_id, '.');
-	if (dot)
-		*dot = '\0';
-
-	for (i = 0; i < loaded_count; i++)
-		if (strcmp(loaded_module_ids[i], module_id) == 0)
-			return 1;
-
-	return 0;
-}
+uint8_t is_module_loaded(const char *filename,
+			 char (*loaded_module_ids)[STK_MOD_ID_BUFFER],
+			 size_t loaded_count);
+uint8_t is_valid_module_file(const char *filename);
 
 int platform_mkdir(const char *path)
 {
@@ -535,7 +477,7 @@ stk_module_event_t *platform_directory_watch_check(
 			    (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO))
 				? (is_module_loaded(event->name,
 						    loaded_module_ids,
-						    loaded_count)
+						    loaded_count) >= 0
 				       ? STK_MOD_RELOAD
 				       : STK_MOD_LOAD)
 				: STK_MOD_UNLOAD;
@@ -611,7 +553,7 @@ stk_module_event_t *platform_directory_watch_check(
 					 FILE_ACTION_RENAMED_OLD_NAME)
 					? (is_module_loaded((*file_list)[index],
 							    loaded_module_ids,
-							    loaded_count)
+							    loaded_count) >= 0
 					       ? STK_MOD_RELOAD
 					       : STK_MOD_LOAD)
 					: STK_MOD_UNLOAD;
@@ -683,7 +625,8 @@ stk_module_event_t *platform_directory_watch_check(
 		if (!old_snap || old_snap->mtime != new_snapshots[i].mtime) {
 			events[index] =
 			    is_module_loaded(new_snapshots[i].filename,
-					     loaded_module_ids, loaded_count)
+					     loaded_module_ids,
+					     loaded_count) >= 0
 				? STK_MOD_RELOAD
 				: STK_MOD_LOAD;
 			strncpy((*file_list)[index], new_snapshots[i].filename,

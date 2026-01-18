@@ -9,6 +9,20 @@
 #define STK_PATH_MAX 256
 #define STK_PATH_MAX_OS 4096
 
+#if defined(__linux__) || defined(_WIN32)
+#define STK_EVENT_BUFFER 4096
+#endif
+
+#if defined(_WIN32)
+#define STK_MODULE_EXT ".dll"
+#elif defined(__APPLE__)
+#define STK_MODULE_EXT ".dylib"
+#else
+#define STK_MODULE_EXT ".so"
+#endif
+
+#define STK_MODULE_EXT_LEN (sizeof(STK_MODULE_EXT) - 1)
+
 #ifdef __cplusplus
 extern "C" {
 #endif

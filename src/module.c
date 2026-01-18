@@ -1,4 +1,5 @@
 #include "stk.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,6 +17,79 @@ stk_module_func *stk_shutdowns = NULL;
 size_t module_count = 0;
 
 size_t stk_module_count(void) { return module_count; }
+
+void extract_module_id(const char *path, char *out_id)
+{
+	const char *basename;
+	char *dot;
+
+	basename = strrchr(path, '/');
+#ifdef _WIN32
+	if (!basename)
+		basename = strrchr(path, '\\');
+#endif
+	if (!basename)
+		basename = path;
+	else
+		basename++;
+
+	strncpy(out_id, basename, STK_MOD_ID_BUFFER - 1);
+	out_id[STK_MOD_ID_BUFFER - 1] = '\0';
+
+	dot = strrchr(out_id, '.');
+	if (dot)
+		*dot = '\0';
+}
+
+uint8_t is_valid_module_file(const char *filename)
+{
+	const char *ext;
+	size_t name_len;
+
+	if (!filename)
+		return 0;
+
+	name_len = strlen(filename);
+
+	if (name_len <= STK_MODULE_EXT_LEN)
+		return 0;
+
+	ext = filename + (name_len - STK_MODULE_EXT_LEN);
+	return strcmp(ext, STK_MODULE_EXT) == 0;
+}
+
+int is_module_loaded(const char *filename,
+		     char (*loaded_module_ids)[STK_MOD_ID_BUFFER],
+		     size_t loaded_count)
+{
+	char module_id[STK_MOD_ID_BUFFER];
+	const char *basename;
+	char *dot;
+	size_t i;
+
+	basename = strrchr(filename, '/');
+#ifdef _WIN32
+	if (!basename)
+		basename = strrchr(filename, '\\');
+#endif
+	if (!basename)
+		basename = filename;
+	else
+		basename++;
+
+	strncpy(module_id, basename, STK_MOD_ID_BUFFER - 1);
+	module_id[STK_MOD_ID_BUFFER - 1] = '\0';
+
+	dot = strrchr(module_id, '.');
+	if (dot)
+		*dot = '\0';
+
+	for (i = 0; i < loaded_count; i++)
+		if (strcmp(loaded_module_ids[i], module_id) == 0)
+			return i;
+
+	return -1;
+}
 
 int stk_module_load(const char *path, int index)
 {
