@@ -115,7 +115,7 @@ size_t stk_poll(void)
 {
 	char (*file_list)[STK_PATH_MAX] = NULL;
 	stk_module_event_t *events = NULL;
-	size_t file_count, i;
+	size_t file_count = 0, i;
 
 	events = platform_directory_watch_check(watch_handle, &file_list,
 						&file_count, stk_module_ids,
