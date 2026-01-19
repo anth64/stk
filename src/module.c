@@ -99,15 +99,20 @@ int stk_module_load(const char *path, int index)
 	const char *basename;
 	char *dot;
 	char module_id[STK_MOD_ID_BUFFER];
+	union {
+		void *obj;
+		stk_module_func func;
+	} u;
 
 	handle = platform_load_library(path);
 	if (!handle)
 		return -1;
 
-	init_func =
-	    (stk_module_func)platform_get_symbol(handle, "stk_module_init");
-	shutdown_func =
-	    (stk_module_func)platform_get_symbol(handle, "stk_module_shutdown");
+	u.obj = platform_get_symbol(handle, "stk_module_init");
+	init_func = u.func;
+
+	u.obj = platform_get_symbol(handle, "stk_module_shutdown");
+	shutdown_func = u.func;
 
 	if (!init_func || !shutdown_func) {
 		platform_unload_library(handle);
