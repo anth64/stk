@@ -2,7 +2,6 @@ include config.mk
 
 ifeq ($(OS),Windows_NT)
     FULL_LIB := $(LIB_NAME).dll
-    LDFLAGS_PLAT := -ldl
 else
     FULL_LIB := lib$(LIB_NAME).so
     LDFLAGS_PLAT := -ldl
