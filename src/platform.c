@@ -1,4 +1,5 @@
 #include "stk.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -341,7 +342,7 @@ void platform_unload_library(void *handle)
 void *platform_get_symbol(void *handle, const char *symbol)
 {
 #ifdef _WIN32
-	return (void *)GetProcAddress((HMODULE)handle, symbol);
+	return (void *)(intptr_t)GetProcAddress((HMODULE)handle, symbol);
 #else
 	return dlsym(handle, symbol);
 #endif
@@ -649,7 +650,6 @@ stk_module_event_t *platform_directory_watch_check(
 char (*platform_directory_init_scan(const char *mod_dir, size_t *out_count))
     [STK_PATH_MAX] {
 	    char (*file_list)[STK_PATH_MAX] = NULL;
-	    char work_path[STK_PATH_MAX_OS];
 	    size_t count = 0, index = 0;
 
 #if defined(_WIN32)
@@ -706,6 +706,7 @@ char (*platform_directory_init_scan(const char *mod_dir, size_t *out_count))
 	    } while (FindNextFileW(find_handle, &find_data) && index < count);
 	    FindClose(find_handle);
 #else
+	    char work_path[STK_PATH_MAX_OS];
 	    DIR *dir;
 	    struct dirent *entry;
 	    struct stat file_stat;
