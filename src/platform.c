@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #elif defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
 #include <dirent.h>
@@ -24,9 +25,37 @@
 #endif
 
 int is_module_loaded(const char *filename,
-		     char (*loaded_module_ids)[STK_MOD_ID_BUFFER],
-		     size_t loaded_count);
+		     char (*loaded_ids)[STK_MOD_ID_BUFFER], size_t count);
 uint8_t is_valid_module_file(const char *filename);
+
+#ifndef __linux__
+typedef struct {
+	char filename[STK_PATH_MAX];
+#ifdef _WIN32
+	FILETIME mtime;
+#else
+	time_t mtime;
+#endif
+} platform_snapshot_t;
+
+typedef struct {
+	char path[STK_PATH_MAX];
+	platform_snapshot_t *snaps;
+	size_t count;
+	union {
+#ifdef _WIN32
+		HANDLE change_handle;
+#else
+		struct {
+			int kq;
+			int dir_fd;
+			int *file_fds;
+			size_t file_fd_count;
+		} k;
+#endif
+	} watch;
+} platform_watch_context_t;
+#endif
 
 int platform_mkdir(const char *path)
 {
@@ -51,65 +80,57 @@ int platform_copy_file(const char *from, const char *to)
 #ifdef _WIN32
 	return CopyFileA(from, to, FALSE) ? 0 : -1;
 #else
-	FILE *src, *dst;
-	char buffer[STK_PATH_MAX];
-	size_t bytes;
-	int result = 0;
+	FILE *src = NULL, *dst = NULL;
+	char buf[STK_PATH_MAX_OS];
+	size_t n;
+	int ret = -1;
 
 	src = fopen(from, "rb");
 	if (!src)
-		return -1;
+		goto cleanup;
 
 	dst = fopen(to, "wb");
-	if (!dst) {
+	if (!dst)
+		goto cleanup;
+
+	while ((n = fread(buf, 1, sizeof(buf), src)) > 0)
+		fwrite(buf, 1, n, dst);
+
+	ret = 0;
+
+cleanup:
+	if (src)
 		fclose(src);
-		return -1;
-	}
-
-	while ((bytes = fread(buffer, 1, sizeof(buffer), src)) > 0) {
-		if (fwrite(buffer, 1, bytes, dst) != bytes) {
-			result = -1;
-			break;
-		}
-	}
-
-	fclose(src);
-	fclose(dst);
-	return result;
+	if (dst)
+		fclose(dst);
+	return ret;
 #endif
 }
 
 int platform_remove_dir(const char *path)
 {
 #ifdef _WIN32
-	WIN32_FIND_DATAW find_data;
-	HANDLE find_handle;
-	WCHAR search_path[STK_PATH_MAX_OS];
-	char temp_filename[STK_PATH_MAX];
-	int len;
+	WIN32_FIND_DATAA fd;
+	HANDLE h;
+	char s[STK_PATH_MAX_OS], f[STK_PATH_MAX_OS];
+	sprintf(s, "%s\\*", path);
 
-	swprintf(search_path, STK_PATH_MAX_OS, L"%S\\*", path);
-	find_handle = FindFirstFileW(search_path, &find_data);
+	h = FindFirstFileA(s, &fd);
+	if (h == INVALID_HANDLE_VALUE)
+		goto remove_dir;
 
-	if (find_handle != INVALID_HANDLE_VALUE) {
-		do {
-			if (find_data.dwFileAttributes &
-			    FILE_ATTRIBUTE_DIRECTORY)
-				continue;
+	do {
+		if (strcmp(fd.cFileName, ".") == 0 ||
+		    strcmp(fd.cFileName, "..") == 0)
+			continue;
 
-			len = WideCharToMultiByte(
-			    CP_UTF8, 0, find_data.cFileName, -1, temp_filename,
-			    STK_PATH_MAX - 1, NULL, NULL);
-			if (len > 0) {
-				char full_path[STK_PATH_MAX_OS];
-				snprintf(full_path, sizeof(full_path), "%s\\%s",
-					 path, temp_filename);
-				DeleteFileA(full_path);
-			}
-		} while (FindNextFileW(find_handle, &find_data));
-		FindClose(find_handle);
-	}
+		sprintf(f, "%s\\%s", path, fd.cFileName);
+		DeleteFileA(f);
+	} while (FindNextFileA(h, &fd));
 
+	FindClose(h);
+
+remove_dir:
 	return RemoveDirectoryA(path) ? 0 : -1;
 #else
 	DIR *dir;
@@ -120,206 +141,23 @@ int platform_remove_dir(const char *path)
 	if (!dir)
 		return -1;
 
-	while ((entry = readdir(dir)) != NULL) {
-		if (strcmp(entry->d_name, ".") == 0 ||
-		    strcmp(entry->d_name, "..") == 0)
-			continue;
+loop:
+	entry = readdir(dir);
+	if (!entry)
+		goto loop_end;
 
-		sprintf(filepath, "%s/%s", path, entry->d_name);
-		unlink(filepath);
-	}
+	if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+		goto loop;
 
+	sprintf(filepath, "%s/%s", path, entry->d_name);
+	unlink(filepath);
+	goto loop;
+
+loop_end:
 	closedir(dir);
 	return rmdir(path);
 #endif
 }
-
-#if !defined(__linux__) && !defined(_WIN32)
-typedef struct {
-	char filename[STK_PATH_MAX];
-	time_t mtime;
-} file_snapshot_t;
-
-typedef struct {
-	int kq;
-	int dir_fd;
-	char path[STK_PATH_MAX];
-	int *file_fds;
-	size_t file_fd_count;
-	file_snapshot_t *snapshots;
-	size_t snapshot_count;
-	size_t snapshot_capacity;
-} kqueue_watch_context_t;
-
-static file_snapshot_t *create_snapshot(const char *path, size_t *out_count,
-					size_t *out_capacity)
-{
-	DIR *dir;
-	struct dirent *entry;
-	struct stat file_stat;
-	char work_path[STK_PATH_MAX_OS];
-	file_snapshot_t *snapshots;
-	size_t count, capacity, index;
-
-	snapshots = NULL;
-	count = 0;
-	capacity = 0;
-	index = 0;
-
-	dir = opendir(path);
-	if (!dir) {
-		*out_count = 0;
-		*out_capacity = 0;
-		return NULL;
-	}
-
-	while ((entry = readdir(dir)) != NULL) {
-		if (strcmp(entry->d_name, ".") == 0 ||
-		    strcmp(entry->d_name, "..") == 0)
-			continue;
-
-		if (!is_valid_module_file(entry->d_name))
-			continue;
-
-		sprintf(work_path, "%s/%s", path, entry->d_name);
-		if (stat(work_path, &file_stat) == 0 &&
-		    S_ISREG(file_stat.st_mode))
-			count++;
-	}
-
-	if (count == 0) {
-		closedir(dir);
-		*out_count = 0;
-		*out_capacity = 0;
-		return NULL;
-	}
-
-	capacity = count;
-	snapshots = malloc(capacity * sizeof(file_snapshot_t));
-	if (!snapshots) {
-		closedir(dir);
-		*out_count = 0;
-		*out_capacity = 0;
-		return NULL;
-	}
-
-	rewinddir(dir);
-
-	while ((entry = readdir(dir)) != NULL && index < count) {
-		if (strcmp(entry->d_name, ".") == 0 ||
-		    strcmp(entry->d_name, "..") == 0)
-			continue;
-
-		if (!is_valid_module_file(entry->d_name))
-			continue;
-
-		sprintf(work_path, "%s/%s", path, entry->d_name);
-		if (stat(work_path, &file_stat) != 0 ||
-		    !S_ISREG(file_stat.st_mode))
-			continue;
-
-		strncpy(snapshots[index].filename, entry->d_name,
-			STK_PATH_MAX - 1);
-		snapshots[index].filename[STK_PATH_MAX - 1] = '\0';
-		snapshots[index].mtime = file_stat.st_mtime;
-		index++;
-	}
-
-	closedir(dir);
-	*out_count = index;
-	*out_capacity = capacity;
-	return snapshots;
-}
-
-static file_snapshot_t *find_in_snapshot(file_snapshot_t *snapshots,
-					 size_t count, const char *filename)
-{
-	size_t i;
-	for (i = 0; i < count; i++) {
-		if (strcmp(snapshots[i].filename, filename) == 0) {
-			return &snapshots[i];
-		}
-	}
-	return NULL;
-}
-
-static void setup_file_watches(kqueue_watch_context_t *ctx)
-{
-	DIR *dir;
-	struct dirent *entry;
-	char filepath[STK_PATH_MAX_OS];
-	struct kevent event;
-	size_t idx;
-	int fd;
-
-	dir = opendir(ctx->path);
-	if (!dir)
-		return;
-
-	ctx->file_fd_count = 0;
-	while ((entry = readdir(dir)) != NULL) {
-		if (is_valid_module_file(entry->d_name))
-			ctx->file_fd_count++;
-	}
-
-	if (ctx->file_fd_count == 0) {
-		closedir(dir);
-		ctx->file_fds = NULL;
-		return;
-	}
-
-	ctx->file_fds = malloc(ctx->file_fd_count * sizeof(int));
-	if (!ctx->file_fds) {
-		closedir(dir);
-		ctx->file_fd_count = 0;
-		return;
-	}
-
-	rewinddir(dir);
-	idx = 0;
-
-	while ((entry = readdir(dir)) != NULL && idx < ctx->file_fd_count) {
-		if (!is_valid_module_file(entry->d_name))
-			continue;
-
-		sprintf(filepath, "%s/%s", ctx->path, entry->d_name);
-		fd = open(filepath, O_RDONLY);
-		if (fd >= 0) {
-			ctx->file_fds[idx++] = fd;
-			EV_SET(&event, fd, EVFILT_VNODE,
-			       EV_ADD | EV_ENABLE | EV_CLEAR,
-			       NOTE_WRITE | NOTE_DELETE | NOTE_ATTRIB, 0, NULL);
-			kevent(ctx->kq, &event, 1, NULL, 0, NULL);
-		}
-	}
-
-	ctx->file_fd_count = idx;
-	closedir(dir);
-}
-
-static void cleanup_file_watches(kqueue_watch_context_t *ctx)
-{
-	size_t i;
-
-	if (!ctx->file_fds)
-		return;
-
-	for (i = 0; i < ctx->file_fd_count; i++) {
-		if (ctx->file_fds[i] >= 0)
-			close(ctx->file_fds[i]);
-	}
-
-	free(ctx->file_fds);
-	ctx->file_fds = NULL;
-	ctx->file_fd_count = 0;
-}
-
-static void refresh_file_watches(kqueue_watch_context_t *ctx)
-{
-	cleanup_file_watches(ctx);
-	setup_file_watches(ctx);
-}
-#endif
 
 void *platform_load_library(const char *path)
 {
@@ -330,433 +168,533 @@ void *platform_load_library(const char *path)
 #endif
 }
 
-void platform_unload_library(void *handle)
+void platform_unload_library(void *h)
 {
 #ifdef _WIN32
-	FreeLibrary((HMODULE)handle);
+	FreeLibrary((HMODULE)h);
 #else
-	dlclose(handle);
+	dlclose(h);
 #endif
 }
 
-void *platform_get_symbol(void *handle, const char *symbol)
+void *platform_get_symbol(void *h, const char *s)
 {
 #ifdef _WIN32
-	return (void *)(intptr_t)GetProcAddress((HMODULE)handle, symbol);
+	return (void *)(intptr_t)GetProcAddress((HMODULE)h, s);
 #else
-	return dlsym(handle, symbol);
+	return dlsym(h, s);
 #endif
 }
+
+char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
+    [STK_PATH_MAX] {
+	    size_t count = 0, i = 0;
+	    char (*list)[STK_PATH_MAX] = NULL;
+#ifdef _WIN32
+	    WIN32_FIND_DATAA fd;
+	    HANDLE h;
+	    char s[STK_PATH_MAX_OS];
+
+	    sprintf(s, "%s\\*", dir_path);
+	    h = FindFirstFileA(s, &fd);
+	    if (h == INVALID_HANDLE_VALUE)
+		    goto create_and_exit;
+
+	    do {
+		    if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			    continue;
+		    if (is_valid_module_file(fd.cFileName))
+			    count++;
+	    } while (FindNextFileA(h, &fd));
+
+	    FindClose(h);
+
+	    if (count == 0)
+		    goto exit;
+
+	    list = malloc(count * sizeof(*list));
+	    if (!list)
+		    goto exit;
+
+	    h = FindFirstFileA(s, &fd);
+	    if (h == INVALID_HANDLE_VALUE)
+		    goto exit;
+
+	    while (FindNextFileA(h, &fd) && i < count) {
+		    if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			    continue;
+		    if (is_valid_module_file(fd.cFileName))
+			    strncpy(list[i++], fd.cFileName, STK_PATH_MAX - 1);
+	    }
+	    FindClose(h);
+	    goto exit;
+
+    create_and_exit:
+	    platform_mkdir(dir_path);
+    exit:
+	    *out_count = i;
+	    return list;
+#else
+	    DIR *d;
+	    struct dirent *e;
+	    struct stat st;
+	    char f[STK_PATH_MAX_OS];
+
+	    d = opendir(dir_path);
+	    if (!d)
+		    goto create_and_exit;
+
+    count_loop:
+	    e = readdir(d);
+	    if (!e)
+		    goto count_done;
+
+	    sprintf(f, "%s/%s", dir_path, e->d_name);
+	    if (!is_valid_module_file(e->d_name))
+		    goto count_loop;
+	    if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
+		    goto count_loop;
+
+	    count++;
+	    goto count_loop;
+
+    count_done:
+	    if (count == 0)
+		    goto close_and_exit;
+
+	    rewinddir(d);
+	    list = malloc(count * sizeof(*list));
+	    if (!list)
+		    goto close_and_exit;
+
+    fill_loop:
+	    e = readdir(d);
+	    if (!e || i >= count)
+		    goto close_and_exit;
+
+	    sprintf(f, "%s/%s", dir_path, e->d_name);
+	    if (!is_valid_module_file(e->d_name))
+		    goto fill_loop;
+	    if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
+		    goto fill_loop;
+
+	    strncpy(list[i++], e->d_name, STK_PATH_MAX - 1);
+	    goto fill_loop;
+
+    create_and_exit:
+	    platform_mkdir(dir_path);
+	    *out_count = 0;
+	    return NULL;
+
+    close_and_exit:
+	    closedir(d);
+	    *out_count = i;
+	    return list;
+#endif
+    }
+
+#if !defined(__linux__) && !defined(_WIN32)
+static void update_watches(platform_watch_context_t *ctx)
+{
+	struct kevent ev;
+	DIR *d;
+	struct dirent *e;
+	char f[STK_PATH_MAX_OS];
+	size_t i;
+	int fd;
+	int *tmp_fds;
+
+	for (i = 0; i < ctx->watch.k.file_fd_count; i++) {
+		close(ctx->watch.k.file_fds[i]);
+	}
+	free(ctx->watch.k.file_fds);
+	ctx->watch.k.file_fds = NULL;
+	ctx->watch.k.file_fd_count = 0;
+
+	EV_SET(&ev, ctx->watch.k.dir_fd, EVFILT_VNODE,
+	       EV_ADD | EV_ENABLE | EV_CLEAR,
+	       NOTE_WRITE | NOTE_DELETE | NOTE_RENAME, 0, NULL);
+	kevent(ctx->watch.k.kq, &ev, 1, NULL, 0, NULL);
+
+	d = opendir(ctx->path);
+	if (!d)
+		return;
+
+scan_loop:
+	e = readdir(d);
+	if (!e)
+		goto scan_done;
+
+	if (!is_valid_module_file(e->d_name))
+		goto scan_loop;
+
+	sprintf(f, "%s/%s", ctx->path, e->d_name);
+	fd = open(f, O_RDONLY);
+	if (fd < 0)
+		goto scan_loop;
+
+	tmp_fds = realloc(ctx->watch.k.file_fds,
+			  sizeof(int) * (ctx->watch.k.file_fd_count + 1));
+	if (!tmp_fds) {
+		close(fd);
+		goto scan_loop;
+	}
+
+	ctx->watch.k.file_fds = tmp_fds;
+	ctx->watch.k.file_fds[ctx->watch.k.file_fd_count++] = fd;
+
+	EV_SET(&ev, fd, EVFILT_VNODE, EV_ADD | EV_ENABLE | EV_CLEAR,
+	       NOTE_WRITE | NOTE_ATTRIB, 0, NULL);
+	kevent(ctx->watch.k.kq, &ev, 1, NULL, 0, NULL);
+
+	goto scan_loop;
+
+scan_done:
+	closedir(d);
+}
+#endif
 
 void *platform_directory_watch_start(const char *path)
 {
-#ifdef __linux__
-	int fd, wd;
-	fd = inotify_init1(IN_NONBLOCK);
+#if defined(__linux__)
+	int fd = inotify_init1(IN_NONBLOCK);
 	if (fd < 0)
 		return NULL;
-	wd = inotify_add_watch(
+	inotify_add_watch(
 	    fd, path, IN_CLOSE_WRITE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM);
-	if (wd < 0) {
-		close(fd);
-		return NULL;
-	}
 	return (void *)(long)fd;
-#elif defined(_WIN32)
-	HANDLE handle =
-	    CreateFileA(path, FILE_LIST_DIRECTORY,
-			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-			NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-	return (handle == INVALID_HANDLE_VALUE) ? NULL : (void *)handle;
 #else
-	struct kevent event;
-	kqueue_watch_context_t *ctx;
-
-	ctx = malloc(sizeof(kqueue_watch_context_t));
+	platform_watch_context_t *ctx =
+	    calloc(1, sizeof(platform_watch_context_t));
 	if (!ctx)
 		return NULL;
-
-	ctx->kq = kqueue();
-	ctx->dir_fd = open(path, O_RDONLY);
 	strncpy(ctx->path, path, STK_PATH_MAX - 1);
-	ctx->path[STK_PATH_MAX - 1] = '\0';
-	ctx->file_fds = NULL;
-	ctx->file_fd_count = 0;
-	ctx->snapshots = create_snapshot(path, &ctx->snapshot_count,
-					 &ctx->snapshot_capacity);
 
-	if (ctx->kq < 0 || ctx->dir_fd < 0) {
-		if (ctx->kq >= 0)
-			close(ctx->kq);
-		if (ctx->dir_fd >= 0)
-			close(ctx->dir_fd);
-		free(ctx->snapshots);
-		free(ctx);
-		return NULL;
+#ifdef _WIN32
+	{
+		WIN32_FIND_DATAA fd;
+		HANDLE h;
+		char s[STK_PATH_MAX_OS];
+		void *tmp_snaps;
+
+		ctx->watch.change_handle = FindFirstChangeNotificationA(
+		    path, FALSE,
+		    FILE_NOTIFY_CHANGE_FILE_NAME |
+			FILE_NOTIFY_CHANGE_LAST_WRITE);
+
+		sprintf(s, "%s\\*", path);
+		h = FindFirstFileA(s, &fd);
+		if (h == INVALID_HANDLE_VALUE)
+			goto done;
+
+	win_scan_loop:
+		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+		    is_valid_module_file(fd.cFileName)) {
+			tmp_snaps = realloc(ctx->snaps,
+					    (ctx->count + 1) *
+						sizeof(platform_snapshot_t));
+			if (tmp_snaps) {
+				ctx->snaps = tmp_snaps;
+				strncpy(ctx->snaps[ctx->count].filename,
+					fd.cFileName, STK_PATH_MAX - 1);
+				ctx->snaps[ctx->count++].mtime =
+				    fd.ftLastWriteTime;
+			}
+		}
+		if (FindNextFileA(h, &fd))
+			goto win_scan_loop;
+
+		FindClose(h);
 	}
+#else
+	{
+		DIR *d;
+		struct dirent *e;
+		struct stat st;
+		char f[STK_PATH_MAX_OS];
+		void *tmp_snaps;
 
-	EV_SET(&event, ctx->dir_fd, EVFILT_VNODE, EV_ADD | EV_ENABLE | EV_CLEAR,
-	       NOTE_WRITE | NOTE_DELETE | NOTE_RENAME, 0, NULL);
-	kevent(ctx->kq, &event, 1, NULL, 0, NULL);
+		ctx->watch.k.kq = kqueue();
+		ctx->watch.k.dir_fd = open(path, O_RDONLY);
 
-	setup_file_watches(ctx);
+		d = opendir(path);
+		if (!d)
+			goto bsd_setup;
 
-	return (void *)ctx;
+	bsd_scan_loop:
+		e = readdir(d);
+		if (!e)
+			goto bsd_scan_done;
+
+		sprintf(f, "%s/%s", path, e->d_name);
+		if (!is_valid_module_file(e->d_name))
+			goto bsd_scan_loop;
+		if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
+			goto bsd_scan_loop;
+
+		tmp_snaps = realloc(
+		    ctx->snaps, (ctx->count + 1) * sizeof(platform_snapshot_t));
+		if (!tmp_snaps)
+			goto bsd_scan_loop;
+
+		ctx->snaps = tmp_snaps;
+		strncpy(ctx->snaps[ctx->count].filename, e->d_name,
+			STK_PATH_MAX - 1);
+		ctx->snaps[ctx->count++].mtime = st.st_mtime;
+
+		goto bsd_scan_loop;
+
+	bsd_scan_done:
+		closedir(d);
+
+	bsd_setup:
+		update_watches(ctx);
+	}
+#endif
+
+#ifdef _WIN32
+done:
+#endif
+	return ctx;
 #endif
 }
 
 void platform_directory_watch_stop(void *handle)
 {
-#ifdef __linux__
+#if defined(__linux__)
 	if (handle)
 		close((int)(long)handle);
-#elif defined(_WIN32)
-	if (handle)
-		CloseHandle((HANDLE)handle);
 #else
-	kqueue_watch_context_t *ctx;
-	ctx = (kqueue_watch_context_t *)handle;
+#ifndef _WIN32
+	size_t i;
+#endif
+	platform_watch_context_t *ctx = (platform_watch_context_t *)handle;
 	if (!ctx)
 		return;
-	cleanup_file_watches(ctx);
-	if (ctx->dir_fd >= 0)
-		close(ctx->dir_fd);
-	if (ctx->kq >= 0)
-		close(ctx->kq);
-	free(ctx->snapshots);
+
+#ifdef _WIN32
+	FindCloseChangeNotification(ctx->watch.change_handle);
+#else
+	for (i = 0; i < ctx->watch.k.file_fd_count; i++) {
+		close(ctx->watch.k.file_fds[i]);
+	}
+	free(ctx->watch.k.file_fds);
+	close(ctx->watch.k.kq);
+	close(ctx->watch.k.dir_fd);
+#endif
+	free(ctx->snaps);
 	free(ctx);
 #endif
 }
 
 stk_module_event_t *platform_directory_watch_check(
     void *handle, char (**file_list)[STK_PATH_MAX], size_t *out_count,
-    char (*loaded_module_ids)[STK_MOD_ID_BUFFER], const size_t loaded_count)
+    char (*loaded_ids)[STK_MOD_ID_BUFFER], const size_t loaded_count)
 {
-	size_t index = 0;
-	stk_module_event_t *events = NULL;
+#if defined(__linux__)
+	int fd = (int)(long)handle;
+	char buf[STK_EVENT_BUFFER];
+	ssize_t len;
+	size_t idx = 0;
+	stk_module_event_t *evs;
+	char *ptr;
+	struct inotify_event *e;
+	int event_type;
 
-#ifdef __linux__
-	char buffer[STK_EVENT_BUFFER];
-	ssize_t bytes_read;
-	struct inotify_event *event;
-	char *event_ptr;
-	int fd;
-	size_t file_count;
-
-	fd = (int)(long)handle;
-	file_count = 0;
-
-	bytes_read = read(fd, buffer, sizeof(buffer));
-	if (bytes_read <= 0) {
+	len = read(fd, buf, sizeof(buf));
+	if (len <= 0) {
 		*out_count = 0;
 		return NULL;
 	}
 
-	event_ptr = buffer;
-	while (event_ptr < buffer + bytes_read) {
-		event = (struct inotify_event *)event_ptr;
-		if (event->len > 0 && is_valid_module_file(event->name))
-			file_count++;
-		event_ptr += sizeof(struct inotify_event) + event->len;
-	}
+	evs = malloc(8 * sizeof(stk_module_event_t));
+	*file_list = malloc(8 * sizeof(**file_list));
+	ptr = buf;
 
-	if (file_count == 0) {
-		*out_count = 0;
-		return NULL;
-	}
+process_inotify_loop:
+	if (ptr >= buf + len)
+		goto linux_done;
 
-	events = malloc(file_count * sizeof(stk_module_event_t));
-	*file_list = malloc(file_count * sizeof(**file_list));
+	e = (struct inotify_event *)ptr;
+	if (!e->len || !is_valid_module_file(e->name))
+		goto next_event;
 
-	index = 0;
-	event_ptr = buffer;
-	while (event_ptr < buffer + bytes_read) {
-		event = (struct inotify_event *)event_ptr;
-		if (event->len > 0 && is_valid_module_file(event->name)) {
-			events[index] =
-			    (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO))
-				? (is_module_loaded(event->name,
-						    loaded_module_ids,
-						    loaded_count) >= 0
-				       ? STK_MOD_RELOAD
-				       : STK_MOD_LOAD)
-				: STK_MOD_UNLOAD;
-			strncpy((*file_list)[index], event->name,
-				STK_PATH_MAX - 1);
-			(*file_list)[index][STK_PATH_MAX - 1] = '\0';
-			index++;
-		}
-		event_ptr += sizeof(struct inotify_event) + event->len;
+	strncpy((*file_list)[idx], e->name, STK_PATH_MAX - 1);
+
+	event_type = STK_MOD_UNLOAD;
+	if (e->mask & (IN_CLOSE_WRITE | IN_MOVED_TO)) {
+		if (is_module_loaded(e->name, loaded_ids, loaded_count) >= 0)
+			event_type = STK_MOD_RELOAD;
+		else
+			event_type = STK_MOD_LOAD;
 	}
-#elif defined(_WIN32)
+	evs[idx++] = event_type;
+
+next_event:
+	ptr += sizeof(struct inotify_event) + e->len;
+	goto process_inotify_loop;
+
+linux_done:
+	*out_count = idx;
+	return evs;
+
+#else
+	platform_watch_context_t *ctx = (platform_watch_context_t *)handle;
+	platform_snapshot_t *new_snaps = NULL;
+	size_t new_count = 0, i, j, ev_idx = 0;
+	stk_module_event_t *evs = NULL;
+	void *tmp_ptr;
+	int found;
+
+#ifdef _WIN32
+	WIN32_FIND_DATAA fd;
 	HANDLE h;
-	BYTE buffer[STK_EVENT_BUFFER];
-	DWORD bytes_returned;
-	FILE_NOTIFY_INFORMATION *info;
-	BYTE *event_ptr;
-	size_t file_count;
-	char temp_filename[STK_PATH_MAX];
-	int len;
-	BOOL result;
+	char s[STK_PATH_MAX_OS];
 
-	h = (HANDLE)handle;
-	file_count = 0;
+	if (WaitForSingleObject(ctx->watch.change_handle, 0) != WAIT_OBJECT_0)
+		goto no_change;
 
-	result = ReadDirectoryChangesW(h, buffer, sizeof(buffer), FALSE,
-				       FILE_NOTIFY_CHANGE_FILE_NAME |
-					   FILE_NOTIFY_CHANGE_LAST_WRITE,
-				       &bytes_returned, NULL, NULL);
-	if (!result || bytes_returned == 0) {
-		*out_count = 0;
-		return NULL;
+	FindNextChangeNotification(ctx->watch.change_handle);
+
+	sprintf(s, "%s\\*", ctx->path);
+	h = FindFirstFileA(s, &fd);
+	if (h == INVALID_HANDLE_VALUE)
+		goto build_diff;
+
+win_snap_loop:
+	if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+	    is_valid_module_file(fd.cFileName)) {
+		tmp_ptr = realloc(new_snaps, (new_count + 1) *
+						 sizeof(platform_snapshot_t));
+		if (!tmp_ptr)
+			goto win_next;
+		new_snaps = tmp_ptr;
+		strncpy(new_snaps[new_count].filename, fd.cFileName,
+			STK_PATH_MAX - 1);
+		new_snaps[new_count++].mtime = fd.ftLastWriteTime;
 	}
+win_next:
+	if (FindNextFileA(h, &fd))
+		goto win_snap_loop;
+	FindClose(h);
+	goto build_diff;
 
-	event_ptr = buffer;
-	while (1) {
-		info = (FILE_NOTIFY_INFORMATION *)event_ptr;
-		len = WideCharToMultiByte(CP_UTF8, 0, info->FileName,
-					  info->FileNameLength / sizeof(WCHAR),
-					  temp_filename, STK_PATH_MAX - 1, NULL,
-					  NULL);
-		if (len > 0) {
-			temp_filename[len] = '\0';
-			if (is_valid_module_file(temp_filename))
-				file_count++;
-		}
-		if (info->NextEntryOffset == 0)
+#else
+	struct kevent kev;
+	struct timespec ts = {0, 0};
+	DIR *d;
+	struct dirent *e;
+	struct stat st;
+	char f[STK_PATH_MAX_OS];
+
+	if (kevent(ctx->watch.k.kq, NULL, 0, &kev, 1, &ts) <= 0)
+		goto no_change;
+
+	d = opendir(ctx->path);
+	if (!d)
+		goto bsd_update;
+
+bsd_snap_loop:
+	e = readdir(d);
+	if (!e)
+		goto bsd_snap_done;
+
+	if (!is_valid_module_file(e->d_name))
+		goto bsd_snap_loop;
+
+	sprintf(f, "%s/%s", ctx->path, e->d_name);
+	if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
+		goto bsd_snap_loop;
+
+	tmp_ptr =
+	    realloc(new_snaps, (new_count + 1) * sizeof(platform_snapshot_t));
+	if (!tmp_ptr)
+		goto bsd_snap_loop;
+
+	new_snaps = tmp_ptr;
+	strncpy(new_snaps[new_count].filename, e->d_name, STK_PATH_MAX - 1);
+	new_snaps[new_count++].mtime = st.st_mtime;
+
+	goto bsd_snap_loop;
+
+bsd_snap_done:
+	closedir(d);
+
+bsd_update:
+	update_watches(ctx);
+	goto build_diff;
+#endif
+
+build_diff:
+	evs = malloc((ctx->count + new_count + 1) * sizeof(stk_module_event_t));
+	*file_list = malloc((ctx->count + new_count + 1) * sizeof(**file_list));
+	if (!evs || !*file_list)
+		goto cleanup_error;
+
+	for (i = 0; i < ctx->count; i++) {
+		found = 0;
+		for (j = 0; j < new_count; j++) {
+			if (strcmp(ctx->snaps[i].filename,
+				   new_snaps[j].filename) != 0)
+				continue;
+
+			found = 1;
+#ifdef _WIN32
+			if (CompareFileTime(&ctx->snaps[i].mtime,
+					    &new_snaps[j].mtime) != 0) {
+#else
+			if (ctx->snaps[i].mtime != new_snaps[j].mtime) {
+#endif
+				strncpy((*file_list)[ev_idx],
+					new_snaps[j].filename,
+					STK_PATH_MAX - 1);
+				evs[ev_idx++] = STK_MOD_RELOAD;
+			}
 			break;
-		event_ptr += info->NextEntryOffset;
+		}
+		if (!found) {
+			strncpy((*file_list)[ev_idx], ctx->snaps[i].filename,
+				STK_PATH_MAX - 1);
+			evs[ev_idx++] = STK_MOD_UNLOAD;
+		}
 	}
 
-	if (file_count == 0) {
-		*out_count = 0;
-		return NULL;
-	}
-
-	events = malloc(file_count * sizeof(stk_module_event_t));
-	*file_list = malloc(file_count * sizeof(**file_list));
-
-	index = 0;
-	event_ptr = buffer;
-	while (1) {
-		info = (FILE_NOTIFY_INFORMATION *)event_ptr;
-		len = WideCharToMultiByte(CP_UTF8, 0, info->FileName,
-					  info->FileNameLength / sizeof(WCHAR),
-					  (*file_list)[index], STK_PATH_MAX - 1,
-					  NULL, NULL);
-		if (len > 0) {
-			(*file_list)[index][len] = '\0';
-			if (is_valid_module_file((*file_list)[index])) {
-				events[index] =
-				    (info->Action != FILE_ACTION_REMOVED &&
-				     info->Action !=
-					 FILE_ACTION_RENAMED_OLD_NAME)
-					? (is_module_loaded((*file_list)[index],
-							    loaded_module_ids,
-							    loaded_count) >= 0
-					       ? STK_MOD_RELOAD
-					       : STK_MOD_LOAD)
-					: STK_MOD_UNLOAD;
-				index++;
+	for (j = 0; j < new_count; j++) {
+		found = 0;
+		for (i = 0; i < ctx->count; i++) {
+			if (strcmp(new_snaps[j].filename,
+				   ctx->snaps[i].filename) == 0) {
+				found = 1;
+				break;
 			}
 		}
-		if (info->NextEntryOffset == 0)
-			break;
-		event_ptr += info->NextEntryOffset;
-	}
-#else
-	kqueue_watch_context_t *ctx;
-	struct kevent events_buf[64];
-	struct timespec timeout;
-	file_snapshot_t *new_snapshots, *old_snap;
-	size_t new_count, new_capacity, i, change_count;
-	int nevents;
-
-	ctx = (kqueue_watch_context_t *)handle;
-	timeout.tv_sec = 0;
-	timeout.tv_nsec = 0;
-	change_count = 0;
-
-	nevents = kevent(ctx->kq, NULL, 0, events_buf, 64, &timeout);
-	if (nevents <= 0) {
-		*out_count = 0;
-		return NULL;
-	}
-
-	new_snapshots = create_snapshot(ctx->path, &new_count, &new_capacity);
-
-	for (i = 0; i < ctx->snapshot_count; i++)
-		if (!find_in_snapshot(new_snapshots, new_count,
-				      ctx->snapshots[i].filename))
-			change_count++;
-
-	for (i = 0; i < new_count; i++) {
-		old_snap = find_in_snapshot(ctx->snapshots, ctx->snapshot_count,
-					    new_snapshots[i].filename);
-		if (!old_snap || old_snap->mtime != new_snapshots[i].mtime)
-			change_count++;
-	}
-
-	if (change_count == 0) {
-		free(new_snapshots);
-		*out_count = 0;
-		return NULL;
-	}
-
-	events = malloc(change_count * sizeof(stk_module_event_t));
-	*file_list = malloc(change_count * sizeof(**file_list));
-
-	index = 0;
-
-	for (i = 0; i < ctx->snapshot_count && index < change_count; i++) {
-		if (!find_in_snapshot(new_snapshots, new_count,
-				      ctx->snapshots[i].filename)) {
-			events[index] = STK_MOD_UNLOAD;
-			strncpy((*file_list)[index], ctx->snapshots[i].filename,
+		if (!found) {
+			strncpy((*file_list)[ev_idx], new_snaps[j].filename,
 				STK_PATH_MAX - 1);
-			(*file_list)[index][STK_PATH_MAX - 1] = '\0';
-			index++;
+			evs[ev_idx++] = STK_MOD_LOAD;
 		}
 	}
 
-	for (i = 0; i < new_count && index < change_count; i++) {
-		old_snap = find_in_snapshot(ctx->snapshots, ctx->snapshot_count,
-					    new_snapshots[i].filename);
-		if (!old_snap || old_snap->mtime != new_snapshots[i].mtime) {
-			events[index] =
-			    is_module_loaded(new_snapshots[i].filename,
-					     loaded_module_ids,
-					     loaded_count) >= 0
-				? STK_MOD_RELOAD
-				: STK_MOD_LOAD;
-			strncpy((*file_list)[index], new_snapshots[i].filename,
-				STK_PATH_MAX - 1);
-			(*file_list)[index][STK_PATH_MAX - 1] = '\0';
-			index++;
-		}
-	}
+	if (ev_idx == 0)
+		goto cleanup_empty;
 
-	free(ctx->snapshots);
-	ctx->snapshots = new_snapshots;
-	ctx->snapshot_count = new_count;
-	ctx->snapshot_capacity = new_capacity;
+	free(ctx->snaps);
+	ctx->snaps = new_snaps;
+	ctx->count = new_count;
+	*out_count = ev_idx;
+	return evs;
 
-	refresh_file_watches(ctx);
+cleanup_error:
+	if (evs)
+		free(evs);
+	if (*file_list)
+		free(*file_list);
+
+cleanup_empty:
+	free(new_snaps);
+
+no_change:
+	*out_count = 0;
+	return NULL;
 #endif
-	*out_count = index;
-	return events;
 }
-
-char (*platform_directory_init_scan(const char *mod_dir, size_t *out_count))
-    [STK_PATH_MAX] {
-	    char (*file_list)[STK_PATH_MAX] = NULL;
-	    size_t count = 0, index = 0;
-
-#if defined(_WIN32)
-	    WIN32_FIND_DATAW find_data;
-	    HANDLE find_handle;
-	    WCHAR search_path[STK_PATH_MAX_OS];
-	    char temp_filename[STK_PATH_MAX];
-	    int len;
-
-	    swprintf(search_path, STK_PATH_MAX_OS, L"%S\\*", mod_dir);
-	    find_handle = FindFirstFileW(search_path, &find_data);
-
-	    if (find_handle == INVALID_HANDLE_VALUE) {
-		    CreateDirectoryA(mod_dir, NULL);
-		    *out_count = 0;
-		    return NULL;
-	    }
-
-	    do {
-		    if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			    continue;
-
-		    len = WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName,
-					      -1, temp_filename,
-					      STK_PATH_MAX - 1, NULL, NULL);
-		    if (len > 0) {
-			    temp_filename[len] = '\0';
-			    if (is_valid_module_file(temp_filename))
-				    count++;
-		    }
-	    } while (FindNextFileW(find_handle, &find_data));
-	    FindClose(find_handle);
-
-	    if (count == 0) {
-		    *out_count = 0;
-		    return NULL;
-	    }
-
-	    find_handle = FindFirstFileW(search_path, &find_data);
-	    file_list = malloc(count * sizeof(*file_list));
-
-	    do {
-		    if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			    continue;
-
-		    len = WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName,
-					      -1, file_list[index],
-					      STK_PATH_MAX - 1, NULL, NULL);
-		    if (len > 0 && index < count) {
-			    file_list[index][len] = '\0';
-			    if (is_valid_module_file(file_list[index]))
-				    index++;
-		    }
-	    } while (FindNextFileW(find_handle, &find_data) && index < count);
-	    FindClose(find_handle);
-#else
-	    char work_path[STK_PATH_MAX_OS];
-	    DIR *dir;
-	    struct dirent *entry;
-	    struct stat file_stat;
-
-	    dir = opendir(mod_dir);
-	    if (!dir) {
-		    mkdir(mod_dir, 0755);
-		    *out_count = 0;
-		    return NULL;
-	    }
-
-	    while ((entry = readdir(dir)) != NULL) {
-		    if (!is_valid_module_file(entry->d_name))
-			    continue;
-
-		    sprintf(work_path, "%s/%s", mod_dir, entry->d_name);
-		    if (stat(work_path, &file_stat) == 0 &&
-			S_ISREG(file_stat.st_mode))
-			    count++;
-	    }
-
-	    if (count == 0) {
-		    closedir(dir);
-		    *out_count = 0;
-		    return NULL;
-	    }
-
-	    rewinddir(dir);
-	    file_list = malloc(count * sizeof(*file_list));
-	    if (!file_list) {
-		    closedir(dir);
-		    *out_count = 0;
-		    return NULL;
-	    }
-
-	    while ((entry = readdir(dir)) != NULL && index < count) {
-		    if (!is_valid_module_file(entry->d_name))
-			    continue;
-
-		    sprintf(work_path, "%s/%s", mod_dir, entry->d_name);
-		    if (stat(work_path, &file_stat) != 0 ||
-			!S_ISREG(file_stat.st_mode))
-			    continue;
-
-		    strncpy(file_list[index], entry->d_name, STK_PATH_MAX - 1);
-		    file_list[index][STK_PATH_MAX - 1] = '\0';
-		    index++;
-	    }
-	    closedir(dir);
-#endif
-	    *out_count = index;
-	    return file_list;
-    }
