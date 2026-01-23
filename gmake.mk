@@ -1,13 +1,10 @@
 include config.mk 
 
 ifeq ($(OS),Windows_NT)
-    # Force the shell to cmd.exe to avoid bash/sh interference
     SHELL := cmd.exe
     FULL_LIB := $(LIB_NAME).dll 
     LDFLAGS_PLAT := 
     CFLAGS_PLAT := 
-    # Windows-safe directory creation: check existence, then create
-    # Use 2>NUL to silence "directory already exists" warnings if any
     MKDIR = if not exist $(subst /,\,$(1)) mkdir $(subst /,\,$(1))
     RMDIR = if exist $(subst /,\,$(1)) rd /s /q $(subst /,\,$(1))
 else
