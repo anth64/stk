@@ -117,8 +117,10 @@ int platform_copy_file(const char *from, const char *to)
 cleanup:
 	if (src)
 		fclose(src);
+
 	if (dst)
 		fclose(dst);
+
 	return ret;
 #endif
 }
@@ -269,6 +271,7 @@ char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
 	    sprintf(f, "%s/%s", dir_path, e->d_name);
 	    if (!is_valid_module_file(e->d_name))
 		    goto count_loop;
+
 	    if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
 		    goto count_loop;
 
@@ -292,6 +295,7 @@ char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
 	    sprintf(f, "%s/%s", dir_path, e->d_name);
 	    if (!is_valid_module_file(e->d_name))
 		    goto fill_loop;
+
 	    if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
 		    goto fill_loop;
 
@@ -323,6 +327,7 @@ static void update_watches(platform_watch_context_t *ctx)
 
 	for (i = 0; i < ctx->watch.k.file_fd_count; i++)
 		close(ctx->watch.k.file_fds[i]);
+
 	free(ctx->watch.k.file_fds);
 	ctx->watch.k.file_fds = NULL;
 	ctx->watch.k.file_fd_count = 0;
@@ -331,7 +336,6 @@ static void update_watches(platform_watch_context_t *ctx)
 	       EV_ADD | EV_ENABLE | EV_CLEAR,
 	       NOTE_WRITE | NOTE_DELETE | NOTE_RENAME, 0, NULL);
 	kevent(ctx->watch.k.kq, &ev, 1, NULL, 0, NULL);
-
 	d = opendir(ctx->path);
 	if (!d)
 		return;
@@ -340,10 +344,11 @@ count_loop:
 	e = readdir(d);
 	if (!e)
 		goto count_done;
+
 	if (is_valid_module_file(e->d_name))
 		count++;
-	goto count_loop;
 
+	goto count_loop;
 count_done:
 	if (count == 0)
 		goto cleanup;
@@ -354,7 +359,6 @@ count_done:
 
 	rewinddir(d);
 	i = 0;
-
 scan_loop:
 	e = readdir(d);
 	if (!e || i >= count)
@@ -369,17 +373,13 @@ scan_loop:
 		goto scan_loop;
 
 	new_fds[i++] = fd;
-
 	EV_SET(&ev, fd, EVFILT_VNODE, EV_ADD | EV_ENABLE | EV_CLEAR,
 	       NOTE_WRITE | NOTE_ATTRIB, 0, NULL);
 	kevent(ctx->watch.k.kq, &ev, 1, NULL, 0, NULL);
-
 	goto scan_loop;
-
 scan_done:
 	ctx->watch.k.file_fds = new_fds;
 	ctx->watch.k.file_fd_count = i;
-
 cleanup:
 	closedir(d);
 }
@@ -391,6 +391,7 @@ void *platform_directory_watch_start(const char *path)
 	int fd = inotify_init1(IN_NONBLOCK);
 	if (fd < 0)
 		return NULL;
+
 	inotify_add_watch(
 	    fd, path, IN_CLOSE_WRITE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM);
 	return (void *)(long)fd;
@@ -411,8 +412,8 @@ void *platform_directory_watch_start(const char *path)
 	    calloc(1, sizeof(platform_watch_context_t));
 	if (!ctx)
 		return NULL;
-	strncpy(ctx->path, path, STK_PATH_MAX - 1);
 
+	strncpy(ctx->path, path, STK_PATH_MAX - 1);
 #ifdef _WIN32
 	ctx->watch.change_handle =
 	    CreateFileA(path, FILE_LIST_DIRECTORY,
@@ -434,7 +435,6 @@ void *platform_directory_watch_start(const char *path)
 	} while (FindNextFileA(h, &fd));
 
 	FindClose(h);
-
 	if (count == 0)
 		goto done;
 
@@ -463,7 +463,6 @@ void *platform_directory_watch_start(const char *path)
 
 	ctx->watch.k.kq = kqueue();
 	ctx->watch.k.dir_fd = open(path, O_RDONLY);
-
 	d = opendir(path);
 	if (!d)
 		goto bsd_setup;
@@ -476,6 +475,7 @@ bsd_count_loop:
 	sprintf(f, "%s/%s", path, e->d_name);
 	if (!is_valid_module_file(e->d_name))
 		goto bsd_count_loop;
+
 	if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
 		goto bsd_count_loop;
 
@@ -491,7 +491,6 @@ bsd_count_done:
 		goto bsd_setup;
 
 	rewinddir(d);
-
 bsd_scan_loop:
 	e = readdir(d);
 	if (!e || i >= count)
@@ -500,6 +499,7 @@ bsd_scan_loop:
 	sprintf(f, "%s/%s", path, e->d_name);
 	if (!is_valid_module_file(e->d_name))
 		goto bsd_scan_loop;
+
 	if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
 		goto bsd_scan_loop;
 
@@ -511,7 +511,6 @@ bsd_scan_loop:
 bsd_scan_done:
 	closedir(d);
 	ctx->count = i;
-
 bsd_setup:
 	update_watches(ctx);
 #endif
@@ -535,7 +534,6 @@ void platform_directory_watch_stop(void *handle)
 	platform_watch_context_t *ctx = (platform_watch_context_t *)handle;
 	if (!ctx)
 		return;
-
 #ifdef _WIN32
 	CloseHandle(ctx->watch.change_handle);
 #else
@@ -585,10 +583,14 @@ stk_module_event_t *platform_directory_watch_check(
 	}
 
 	evs = malloc(count * sizeof(stk_module_event_t));
+	if (!evs) {
+		*out_count = 0;
+		return NULL;
+	}
+
 	*file_list = malloc(count * sizeof(**file_list));
-	if (!evs || !*file_list) {
+	if (!*file_list) {
 		free(evs);
-		free(*file_list);
 		*out_count = 0;
 		return NULL;
 	}
@@ -633,8 +635,10 @@ stk_module_event_t *platform_directory_watch_check(
 				else
 					event_type = STK_MOD_LOAD;
 			}
+
 			evs[idx++] = event_type;
 		}
+
 		ptr += sizeof(struct inotify_event) + e->len;
 	}
 
@@ -647,7 +651,6 @@ stk_module_event_t *platform_directory_watch_check(
 	size_t new_count = 0, i, j, ev_idx = 0;
 	stk_module_event_t *evs = NULL;
 	int found;
-
 #ifdef _WIN32
 	WIN32_FIND_DATAA fd;
 	HANDLE h;
@@ -666,7 +669,6 @@ stk_module_event_t *platform_directory_watch_check(
 	} while (FindNextFileA(h, &fd));
 
 	FindClose(h);
-
 	if (count == 0)
 		goto build_diff;
 
@@ -692,7 +694,6 @@ stk_module_event_t *platform_directory_watch_check(
 	} while (FindNextFileA(h, &fd));
 
 	FindClose(h);
-
 #else
 	struct kevent kev;
 	struct timespec ts = {0, 0};
@@ -737,7 +738,6 @@ bsd_count_done:
 	}
 
 	rewinddir(d);
-
 bsd_snap_loop:
 	e = readdir(d);
 	if (!e || new_count >= count)
@@ -754,10 +754,8 @@ bsd_snap_loop:
 	new_snaps[new_count].mtime = st.st_mtime;
 	new_count++;
 	goto bsd_snap_loop;
-
 bsd_snap_done:
 	closedir(d);
-
 bsd_update:
 	update_watches(ctx);
 #endif
@@ -802,6 +800,7 @@ build_diff:
 #endif
 			break;
 		}
+
 		if (!found) {
 			strncpy((*file_list)[ev_idx], ctx->snaps[i].filename,
 				STK_PATH_MAX - 1);
@@ -818,6 +817,7 @@ build_diff:
 				break;
 			}
 		}
+
 		if (!found) {
 			strncpy((*file_list)[ev_idx], new_snaps[j].filename,
 				STK_PATH_MAX - 1);
@@ -837,6 +837,7 @@ build_diff:
 cleanup_error:
 	if (evs)
 		free(evs);
+
 	if (*file_list)
 		free(*file_list);
 
