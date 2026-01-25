@@ -1,5 +1,6 @@
 #include "stk.h"
 #include "stk_log.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,8 @@ extern stk_module_func *stk_shutdowns;
 extern char (*stk_module_ids)[STK_MOD_ID_BUFFER];
 
 extern size_t module_count;
+
+uint8_t stk_initialized = 0;
 
 static char stk_mod_dir[STK_PATH_MAX_OS] = "mods";
 static char stk_tmp_name[STK_MOD_ID_BUFFER] = ".tmp";
@@ -67,6 +70,8 @@ scanned:
 	stk_log(stdout, "[stk] stk v%s initialized! Loaded %lu mod%s from %s/",
 		STK_VERSION_STRING, module_count, module_count != 1 ? "s" : "",
 		stk_mod_dir);
+
+	stk_initialized = 1;
 	return 0;
 }
 
@@ -79,6 +84,7 @@ void stk_shutdown(void)
 
 	stk_module_unload_all();
 	platform_remove_dir(stk_tmp_dir);
+	stk_initialized = 0;
 	stk_log(stdout, "[stk] stk shutdown");
 }
 
@@ -119,7 +125,7 @@ size_t stk_poll(void)
 
 void stk_set_mod_dir(const char *path)
 {
-	if (!path)
+	if (!path || stk_initialized)
 		return;
 
 	strncpy(stk_mod_dir, path, STK_PATH_MAX_OS - 1);
@@ -136,7 +142,7 @@ void stk_set_mod_dir(const char *path)
 
 void stk_set_tmp_dir_name(const char *name)
 {
-	if (!name)
+	if (!name || stk_initialized)
 		return;
 
 	strncpy(stk_tmp_name, name, STK_MOD_ID_BUFFER - 1);
