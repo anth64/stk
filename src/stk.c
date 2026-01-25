@@ -13,8 +13,8 @@ extern char (*stk_module_ids)[STK_MOD_ID_BUFFER];
 
 extern size_t module_count;
 
-static char stk_mod_dir[STK_MOD_DIR_BUFFER];
-static char stk_tmp_dir[STK_MOD_DIR_BUFFER];
+static char stk_mod_dir[STK_MOD_DIR_BUFFER] = "mods";
+static char stk_tmp_dir[STK_MOD_DIR_BUFFER] = "mods/.tmp";
 static void *watch_handle = NULL;
 
 char *extract_module_id(const char *path);
@@ -35,45 +35,14 @@ int platform_mkdir(const char *path);
 int platform_copy_file(const char *from, const char *to);
 int platform_remove_dir(const char *path);
 
-int stk_init(const char *mod_dir, const char *tmp_dir)
+int stk_init(void)
 {
 	char (*files)[STK_PATH_MAX] = NULL;
 	size_t file_count, i;
 	char full_path[STK_PATH_MAX_OS];
 	char tmp_path[STK_PATH_MAX_OS];
 
-	if (mod_dir) {
-		size_t len = strlen(mod_dir);
-		if (len >= STK_MOD_DIR_BUFFER)
-			len = STK_MOD_DIR_BUFFER - 1;
-		memcpy(stk_mod_dir, mod_dir, len);
-		stk_mod_dir[len] = '\0';
-	} else {
-		strcpy(stk_mod_dir, "mods");
-	}
-
-	if (tmp_dir) {
-		size_t len = strlen(tmp_dir);
-		if (len >= STK_MOD_DIR_BUFFER)
-			len = STK_MOD_DIR_BUFFER - 1;
-		memcpy(stk_tmp_dir, tmp_dir, len);
-		stk_tmp_dir[len] = '\0';
-	} else {
-		size_t mod_len = strlen(stk_mod_dir);
-		const char *suffix = "/.tmp";
-		size_t suffix_len = strlen(suffix);
-
-		if (mod_len + suffix_len >= STK_MOD_DIR_BUFFER) {
-			mod_len = STK_MOD_DIR_BUFFER - suffix_len - 1;
-		}
-
-		memcpy(stk_tmp_dir, stk_mod_dir, mod_len);
-		memcpy(stk_tmp_dir + mod_len, suffix, suffix_len);
-		stk_tmp_dir[mod_len + suffix_len] = '\0';
-	}
-
 	platform_mkdir(stk_tmp_dir);
-
 	files = platform_directory_init_scan(stk_mod_dir, &file_count);
 
 	if (file_count > 0 && stk_module_init_memory(file_count) != 0)
