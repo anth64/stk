@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define STK_MOD_FUNC_NAME_BUFFER 64
+
 void *platform_load_library(const char *path);
 void platform_unload_library(void *handle);
 void *platform_get_symbol(void *handle, const char *symbol);
@@ -13,6 +15,10 @@ char (*stk_module_ids)[STK_MOD_ID_BUFFER] = NULL;
 void **stk_handles = NULL;
 stk_module_func *stk_inits = NULL;
 stk_module_func *stk_shutdowns = NULL;
+
+static char stk_mod_init_name[STK_MOD_FUNC_NAME_BUFFER] = "stk_mod_init";
+static char stk_mod_shutdown_name[STK_MOD_FUNC_NAME_BUFFER] =
+    "stk_mod_shutdown";
 
 size_t module_count = 0;
 
@@ -108,10 +114,10 @@ int stk_module_load(const char *path, int index)
 	if (!handle)
 		return -1;
 
-	u.obj = platform_get_symbol(handle, "stk_module_init");
+	u.obj = platform_get_symbol(handle, stk_mod_init_name);
 	init_func = u.func;
 
-	u.obj = platform_get_symbol(handle, "stk_module_shutdown");
+	u.obj = platform_get_symbol(handle, stk_mod_shutdown_name);
 	shutdown_func = u.func;
 
 	if (!init_func || !shutdown_func) {
@@ -199,4 +205,22 @@ void stk_module_unload_all(void)
 		stk_module_unload(i - 1);
 
 	stk_module_free_memory();
+}
+
+void stk_set_module_init_fn(const char *name)
+{
+	if (!name)
+		return;
+
+	strncpy(stk_mod_init_name, name, STK_MOD_FUNC_NAME_BUFFER - 1);
+	stk_mod_init_name[STK_MOD_FUNC_NAME_BUFFER - 1] = '\0';
+}
+
+void stk_set_module_shutdown_fn(const char *name)
+{
+	if (!name)
+		return;
+
+	strncpy(stk_mod_shutdown_name, name, STK_MOD_FUNC_NAME_BUFFER - 1);
+	stk_mod_shutdown_name[STK_MOD_FUNC_NAME_BUFFER - 1] = '\0';
 }

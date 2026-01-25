@@ -13,21 +13,15 @@ extern char (*stk_module_ids)[STK_MOD_ID_BUFFER];
 
 extern size_t module_count;
 
-static char stk_mod_dir[STK_MOD_DIR_BUFFER] = "mods";
-static char stk_tmp_dir[STK_MOD_DIR_BUFFER] = "mods/.tmp";
+static char stk_mod_dir[STK_PATH_MAX_OS] = "mods";
+static char stk_tmp_name[STK_MOD_ID_BUFFER] = ".tmp";
+static char stk_tmp_dir[STK_PATH_MAX_OS] = "mods/.tmp";
 static void *watch_handle = NULL;
 
-char *extract_module_id(const char *path);
 char (*platform_directory_init_scan(const char *path,
 				    size_t *out_count))[STK_PATH_MAX];
 void *platform_directory_watch_start(const char *path);
 void platform_directory_watch_stop(void *handle);
-size_t stk_module_count(void);
-int stk_module_load(const char *path, int index);
-int stk_module_load_init(const char *path, int index);
-void stk_module_unload(size_t index);
-void stk_module_unload_all(void);
-int stk_module_init_memory(size_t capacity);
 stk_module_event_t *platform_directory_watch_check(
     void *handle, char (**file_list)[STK_PATH_MAX], size_t *out_count,
     char (*loaded_module_ids)[STK_MOD_ID_BUFFER], const size_t loaded_count);
@@ -35,12 +29,20 @@ int platform_mkdir(const char *path);
 int platform_copy_file(const char *from, const char *to);
 int platform_remove_dir(const char *path);
 
+char *extract_module_id(const char *path);
+size_t stk_module_count(void);
+int stk_module_load(const char *path, int index);
+int stk_module_load_init(const char *path, int index);
+void stk_module_unload(size_t index);
+void stk_module_unload_all(void);
+int stk_module_init_memory(size_t capacity);
+
 int stk_init(void)
 {
 	char (*files)[STK_PATH_MAX] = NULL;
 	size_t file_count, i;
-	char full_path[STK_PATH_MAX_OS];
-	char tmp_path[STK_PATH_MAX_OS];
+	char full_path[STK_PATH_MAX_OS + STK_PATH_MAX];
+	char tmp_path[STK_PATH_MAX_OS + STK_PATH_MAX];
 
 	platform_mkdir(stk_tmp_dir);
 	files = platform_directory_init_scan(stk_mod_dir, &file_count);
@@ -113,4 +115,37 @@ size_t stk_poll(void)
 	free(file_list);
 
 	return file_count;
+}
+
+void stk_set_mod_dir(const char *path)
+{
+	if (!path)
+		return;
+
+	strncpy(stk_mod_dir, path, STK_PATH_MAX_OS - 1);
+	stk_mod_dir[STK_PATH_MAX_OS - 1] = '\0';
+
+	strncpy(stk_tmp_dir, stk_mod_dir, STK_PATH_MAX_OS - 1);
+	stk_tmp_dir[STK_PATH_MAX_OS - 1] = '\0';
+
+	strncat(stk_tmp_dir, "/", STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
+
+	strncat(stk_tmp_dir, stk_tmp_name,
+		STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
+}
+
+void stk_set_tmp_dir_name(const char *name)
+{
+	if (!name)
+		return;
+
+	strncpy(stk_tmp_name, name, STK_MOD_ID_BUFFER - 1);
+	stk_tmp_name[STK_MOD_ID_BUFFER - 1] = '\0';
+
+	strncpy(stk_tmp_dir, stk_mod_dir, STK_PATH_MAX_OS - 1);
+	stk_tmp_dir[STK_PATH_MAX_OS - 1] = '\0';
+
+	strncat(stk_tmp_dir, "/", STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
+	strncat(stk_tmp_dir, stk_tmp_name,
+		STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
 }

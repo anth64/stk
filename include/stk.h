@@ -37,6 +37,10 @@ int stk_init(void);
 void stk_shutdown(void);
 size_t stk_module_count(void);
 size_t stk_poll(void);
+void stk_set_mod_dir(const char *path);
+void stk_set_tmp_dir_name(const char *name);
+void stk_set_module_init_fn(const char *name);
+void stk_set_module_shutdown_fn(const char *name);
 
 #ifdef __cplusplus
 }
