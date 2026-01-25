@@ -93,8 +93,8 @@ int stk_init(const char *mod_dir, const char *tmp_dir)
 
 scanned:
 	watch_handle = platform_directory_watch_start(stk_mod_dir);
-	stk_log(stdout, "[stk] stk v%s initialized! Loaded %zu mod%s from %s/",
-		STK_VERSION_STRING, module_count, module_count > 1 ? "s" : "",
+	stk_log(stdout, "[stk] stk v%s initialized! Loaded %lu mod%s from %s/",
+		STK_VERSION_STRING, module_count, module_count != 1 ? "s" : "",
 		stk_mod_dir);
 	return 0;
 }
@@ -127,12 +127,15 @@ size_t stk_poll(void)
 		switch (events[i]) {
 		case STK_MOD_RELOAD:
 			/* TODO: Implement reload */
+			stk_log(stdout, "STK_MOD_RELOAD");
 			break;
 		case STK_MOD_LOAD:
 			/* TODO: Implement load */
+			stk_log(stdout, "STK_MOD_LOAD");
 			break;
 		case STK_MOD_UNLOAD:
 			/* TODO: Implement unload */
+			stk_log(stdout, "STK_MOD_UNLOAD");
 			break;
 		}
 	}
