@@ -195,6 +195,11 @@ int stk_module_realloc_memory(size_t new_capacity)
 	stk_module_func *old_inits = stk_inits;
 	stk_module_func *old_shutdowns = stk_shutdowns;
 
+	if (new_capacity == 0) {
+		stk_module_free_memory();
+		return 0;
+	}
+
 	new_module_ids =
 	    realloc(stk_module_ids, new_capacity * sizeof(*stk_module_ids));
 	new_handles = realloc(stk_handles, new_capacity * sizeof(*new_handles));
