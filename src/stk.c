@@ -41,13 +41,23 @@ int stk_module_load_init(const char *path, int index);
 void stk_module_unload(size_t index);
 void stk_module_unload_all(void);
 int stk_module_init_memory(size_t capacity);
+int stk_module_realloc_memory(size_t new_capacity);
+
+static void build_path(char *dest, size_t dest_size, const char *dir,
+		       const char *file)
+{
+	dest[0] = '\0';
+	strncat(dest, dir, dest_size - 1);
+	strncat(dest, "/", dest_size - strlen(dest) - 1);
+	strncat(dest, file, dest_size - strlen(dest) - 1);
+}
 
 int stk_init(void)
 {
 	char (*files)[STK_PATH_MAX] = NULL;
 	size_t file_count, i;
-	char full_path[STK_PATH_MAX_OS + STK_PATH_MAX];
-	char tmp_path[STK_PATH_MAX_OS + STK_PATH_MAX];
+	char full_path[STK_PATH_MAX_OS];
+	char tmp_path[STK_PATH_MAX_OS];
 
 	platform_mkdir(stk_tmp_dir);
 	files = platform_directory_init_scan(stk_mod_dir, &file_count);
@@ -59,10 +69,10 @@ int stk_init(void)
 		goto scanned;
 
 	for (i = 0; i < file_count; ++i) {
-		sprintf(full_path, "%s/%s", stk_mod_dir, files[i]);
-		sprintf(tmp_path, "%s/%s", stk_tmp_dir, files[i]);
-		if (platform_copy_file(full_path, tmp_path) == 0)
-			stk_module_load_init(tmp_path, i);
+		build_path(full_path, sizeof(full_path), stk_mod_dir, files[i]);
+		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir, files[i]);
+		platform_copy_file(full_path, tmp_path);
+		stk_module_load_init(tmp_path, i);
 	}
 
 	free(files);
@@ -97,62 +107,142 @@ size_t stk_poll(void)
 	size_t i, file_count = 0, reload_count = 0, load_count = 0,
 		  unload_count = 0, reload_index = 0, load_index = 0,
 		  unload_index = 0;
-	int *reloaded_mods, *unloaded_mods, *loaded_mods;
+	int *reloaded_mod_indices = NULL, *reloaded_mod_file_indices = NULL,
+	    *unloaded_mod_indices = NULL, *loaded_mod_indices = NULL;
+	size_t remaining_loads, new_capacity, holes_to_fill;
+	size_t write_pos, read_pos;
+	char full_path[STK_PATH_MAX_OS], tmp_path[STK_PATH_MAX_OS];
+	char mod_id[STK_MOD_ID_BUFFER];
+
 	events = platform_directory_watch_check(watch_handle, &file_list,
 						&file_count, stk_module_ids,
 						module_count);
 	if (!events)
-		goto finish_stk_poll;
+		goto finish_poll;
 
 	for (i = 0; i < file_count; ++i) {
-		switch (events[i]) {
-		case STK_MOD_RELOAD:
+		if (events[i] == STK_MOD_RELOAD)
 			++reload_count;
-			break;
-		case STK_MOD_LOAD:
+		else if (events[i] == STK_MOD_LOAD)
 			++load_count;
-			break;
-		case STK_MOD_UNLOAD:
+		else if (events[i] == STK_MOD_UNLOAD)
 			++unload_count;
-			break;
-		}
 	}
 
-	reloaded_mods = malloc(reload_count * sizeof(int));
-	unloaded_mods = malloc(unload_count * sizeof(int));
-	loaded_mods = malloc(load_count * sizeof(int));
+	reloaded_mod_indices = malloc(reload_count * sizeof(int));
+	reloaded_mod_file_indices = malloc(reload_count * sizeof(int));
+	unloaded_mod_indices = malloc(unload_count * sizeof(int));
+	loaded_mod_indices = malloc(load_count * sizeof(int));
 
 	for (i = 0; i < file_count; ++i) {
-		char mod_id[STK_MOD_ID_BUFFER];
 		extract_module_id(file_list[i], mod_id);
 
-		switch (events[i]) {
-		case STK_MOD_RELOAD:
-			reloaded_mods[reload_index++] = is_mod_loaded(mod_id);
-			stk_log(stdout, "STK_MOD_RELOAD %s %ld", mod_id,
-				reload_index - 1);
-			break;
-
-		case STK_MOD_LOAD:
-			loaded_mods[load_index++] = i;
-			stk_log(stdout, "STK_MOD_LOAD %s %ld", mod_id, i);
-			break;
-		case STK_MOD_UNLOAD:
-			unloaded_mods[unload_index++] = is_mod_loaded(mod_id);
-			stk_log(stdout, "STK_MOD_UNLOAD %s %ld", mod_id,
-				unload_index - 1);
-			break;
+		if (events[i] == STK_MOD_RELOAD) {
+			reloaded_mod_file_indices[reload_index] = i;
+			reloaded_mod_indices[reload_index++] =
+			    is_mod_loaded(mod_id);
+		} else if (events[i] == STK_MOD_LOAD) {
+			loaded_mod_indices[load_index++] = i;
+		} else if (events[i] == STK_MOD_UNLOAD) {
+			unloaded_mod_indices[unload_index++] =
+			    is_mod_loaded(mod_id);
 		}
 	}
 
-	free(reloaded_mods);
-	free(unloaded_mods);
-	free(loaded_mods);
+	if (load_count > unload_count)
+		goto handle_grow;
+	goto begin_operations;
 
+handle_grow:
+	remaining_loads = load_count - unload_count;
+	new_capacity = module_count + remaining_loads;
+	if (stk_module_realloc_memory(new_capacity) != 0)
+		goto free_poll;
+	goto begin_operations;
+
+begin_operations:
+	for (i = 0; i < unload_count; ++i)
+		stk_module_unload(unloaded_mod_indices[i]);
+
+	for (i = 0; i < reload_count; ++i)
+		stk_module_unload(reloaded_mod_indices[i]);
+
+	for (i = 0; i < reload_count; ++i) {
+		int file_idx = reloaded_mod_file_indices[i];
+		int mod_idx = reloaded_mod_indices[i];
+
+		build_path(full_path, sizeof(full_path), stk_mod_dir,
+			   file_list[file_idx]);
+		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
+			   file_list[file_idx]);
+		platform_copy_file(full_path, tmp_path);
+		stk_module_load(tmp_path, mod_idx);
+	}
+
+	holes_to_fill = (load_count < unload_count) ? load_count : unload_count;
+	for (i = 0; i < holes_to_fill; ++i) {
+		int target_idx = unloaded_mod_indices[i];
+		int file_idx = loaded_mod_indices[i];
+
+		build_path(full_path, sizeof(full_path), stk_mod_dir,
+			   file_list[file_idx]);
+		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
+			   file_list[file_idx]);
+		platform_copy_file(full_path, tmp_path);
+		stk_module_load(tmp_path, target_idx);
+	}
+
+	if (load_count > unload_count)
+		goto append_modules;
+
+	if (unload_count > load_count)
+		goto trim_arrays;
+
+	goto free_poll;
+
+append_modules:
+	for (; i < load_count; ++i) {
+		int file_idx = loaded_mod_indices[i];
+
+		build_path(full_path, sizeof(full_path), stk_mod_dir,
+			   file_list[file_idx]);
+		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
+			   file_list[file_idx]);
+		platform_copy_file(full_path, tmp_path);
+		stk_module_load(tmp_path, module_count);
+		++module_count;
+	}
+	goto free_poll;
+
+trim_arrays:
+	write_pos = unloaded_mod_indices[holes_to_fill];
+	for (i = holes_to_fill + 1; i < unload_count; ++i) {
+		if (unloaded_mod_indices[i] < write_pos)
+			write_pos = unloaded_mod_indices[i];
+	}
+
+	for (read_pos = write_pos + 1; read_pos < module_count; ++read_pos) {
+		if (stk_handles[read_pos] != NULL) {
+			stk_handles[write_pos] = stk_handles[read_pos];
+			stk_inits[write_pos] = stk_inits[read_pos];
+			stk_shutdowns[write_pos] = stk_shutdowns[read_pos];
+			memcpy(stk_module_ids[write_pos],
+			       stk_module_ids[read_pos], STK_MOD_ID_BUFFER);
+			++write_pos;
+		}
+	}
+	module_count = write_pos;
+	stk_module_realloc_memory(module_count);
+
+free_poll:
+	free(reloaded_mod_indices);
+	free(reloaded_mod_file_indices);
+	free(unloaded_mod_indices);
+	free(loaded_mod_indices);
 	free(events);
 	free(file_list);
 
-finish_stk_poll:
+finish_poll:
 	return file_count;
 }
 
