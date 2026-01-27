@@ -149,6 +149,10 @@ void stk_module_unload(size_t index)
 {
 	stk_shutdowns[index]();
 	platform_unload_library(stk_handles[index]);
+	stk_handles[index] = NULL;
+	stk_inits[index] = NULL;
+	stk_shutdowns[index] = NULL;
+	stk_module_ids[index][0] = '\0';
 }
 
 void stk_module_free_memory(void)
