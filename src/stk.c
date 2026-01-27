@@ -32,7 +32,9 @@ int platform_mkdir(const char *path);
 int platform_copy_file(const char *from, const char *to);
 int platform_remove_dir(const char *path);
 
-char *extract_module_id(const char *path);
+char *extract_module_id(const char *path, char *out_id);
+int is_mod_loaded(const char *module_id);
+
 size_t stk_module_count(void);
 int stk_module_load(const char *path, int index);
 int stk_module_load_init(const char *path, int index);
@@ -92,34 +94,65 @@ size_t stk_poll(void)
 {
 	char (*file_list)[STK_PATH_MAX] = NULL;
 	stk_module_event_t *events = NULL;
-	size_t file_count = 0, i;
-
+	size_t i, file_count = 0, reload_count = 0, load_count = 0,
+		  unload_count = 0, reload_index = 0, load_index = 0,
+		  unload_index = 0;
+	int *reloaded_mods, *unloaded_mods, *loaded_mods;
 	events = platform_directory_watch_check(watch_handle, &file_list,
 						&file_count, stk_module_ids,
 						module_count);
 	if (!events)
-		return 0;
+		goto finish_stk_poll;
 
 	for (i = 0; i < file_count; ++i) {
 		switch (events[i]) {
 		case STK_MOD_RELOAD:
-			/* TODO: Implement reload */
-			stk_log(stdout, "STK_MOD_RELOAD");
+			++reload_count;
 			break;
 		case STK_MOD_LOAD:
-			/* TODO: Implement load */
-			stk_log(stdout, "STK_MOD_LOAD");
+			++load_count;
 			break;
 		case STK_MOD_UNLOAD:
-			/* TODO: Implement unload */
-			stk_log(stdout, "STK_MOD_UNLOAD");
+			++unload_count;
 			break;
 		}
 	}
 
+	reloaded_mods = malloc(reload_count * sizeof(int));
+	unloaded_mods = malloc(unload_count * sizeof(int));
+	loaded_mods = malloc(load_count * sizeof(int));
+
+	for (i = 0; i < file_count; ++i) {
+		char mod_id[STK_MOD_ID_BUFFER];
+		extract_module_id(file_list[i], mod_id);
+
+		switch (events[i]) {
+		case STK_MOD_RELOAD:
+			reloaded_mods[reload_index++] = is_mod_loaded(mod_id);
+			stk_log(stdout, "STK_MOD_RELOAD %s %ld", mod_id,
+				reload_index - 1);
+			break;
+
+		case STK_MOD_LOAD:
+			loaded_mods[load_index++] = i;
+			stk_log(stdout, "STK_MOD_LOAD %s %ld", mod_id, i);
+			break;
+		case STK_MOD_UNLOAD:
+			unloaded_mods[unload_index++] = is_mod_loaded(mod_id);
+			stk_log(stdout, "STK_MOD_UNLOAD %s %ld", mod_id,
+				unload_index - 1);
+			break;
+		}
+	}
+
+	free(reloaded_mods);
+	free(unloaded_mods);
+	free(loaded_mods);
+
 	free(events);
 	free(file_list);
 
+finish_stk_poll:
 	return file_count;
 }
 

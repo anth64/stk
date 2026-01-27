@@ -24,9 +24,9 @@
 #include <unistd.h>
 #endif
 
-int is_module_loaded(const char *filename,
-		     char (*loaded_ids)[STK_MOD_ID_BUFFER], size_t count);
+int is_mod_loaded(const char *module_name);
 uint8_t is_valid_module_file(const char *filename);
+void extract_module_id(const char *path, char *out_id);
 
 #ifdef _WIN32
 static uint8_t is_file_ready(const char *dir_path, const char *filename)
@@ -629,8 +629,9 @@ stk_module_event_t *platform_directory_watch_check(
 
 			event_type = STK_MOD_UNLOAD;
 			if (e->mask & (IN_CLOSE_WRITE | IN_MOVED_TO)) {
-				if (is_module_loaded(e->name, loaded_ids,
-						     loaded_count) >= 0)
+				char event_module_name[STK_MOD_ID_BUFFER];
+				extract_module_id(e->name, event_module_name);
+				if (is_mod_loaded(event_module_name) >= 0)
 					event_type = STK_MOD_RELOAD;
 				else
 					event_type = STK_MOD_LOAD;

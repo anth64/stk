@@ -66,34 +66,13 @@ uint8_t is_valid_module_file(const char *filename)
 	return strcmp(ext, STK_MODULE_EXT) == 0;
 }
 
-int is_module_loaded(const char *filename,
-		     char (*loaded_module_ids)[STK_MOD_ID_BUFFER],
-		     size_t loaded_count)
+int is_mod_loaded(const char *module_name)
 {
-	char module_id[STK_MOD_ID_BUFFER];
-	const char *basename;
-	char *dot;
 	size_t i;
 
-	basename = strrchr(filename, '/');
-#ifdef _WIN32
-	if (!basename)
-		basename = strrchr(filename, '\\');
-#endif
-	if (!basename)
-		basename = filename;
-	else
-		basename++;
-
-	strncpy(module_id, basename, STK_MOD_ID_BUFFER - 1);
-	module_id[STK_MOD_ID_BUFFER - 1] = '\0';
-
-	dot = strrchr(module_id, '.');
-	if (dot)
-		*dot = '\0';
-
-	for (i = 0; i < loaded_count; i++)
-		if (strcmp(loaded_module_ids[i], module_id) == 0)
+	for (i = 0; i < module_count; i++)
+		if (strncmp(stk_module_ids[i], module_name,
+			    STK_MOD_ID_BUFFER) == 0)
 			return i;
 
 	return -1;
