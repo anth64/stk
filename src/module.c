@@ -179,6 +179,51 @@ int stk_module_init_memory(size_t capacity)
 	return 0;
 }
 
+int stk_module_realloc_memory(size_t new_capacity)
+{
+	char (*new_module_ids)[STK_MOD_ID_BUFFER];
+	void **new_handles;
+	stk_module_func *new_inits;
+	stk_module_func *new_shutdowns;
+
+	char (*old_module_ids)[STK_MOD_ID_BUFFER] = stk_module_ids;
+	void **old_handles = stk_handles;
+	stk_module_func *old_inits = stk_inits;
+	stk_module_func *old_shutdowns = stk_shutdowns;
+
+	new_module_ids =
+	    realloc(stk_module_ids, new_capacity * sizeof(*stk_module_ids));
+	new_handles = realloc(stk_handles, new_capacity * sizeof(*new_handles));
+	new_inits = realloc(stk_inits, new_capacity * sizeof(*new_inits));
+	new_shutdowns =
+	    realloc(stk_shutdowns, new_capacity * sizeof(*new_shutdowns));
+
+	if (!new_module_ids || !new_handles || !new_inits || !new_shutdowns) {
+		if (new_module_ids && new_module_ids != old_module_ids)
+			free(new_module_ids);
+		if (new_handles && new_handles != old_handles)
+			free(new_handles);
+		if (new_inits && new_inits != old_inits)
+			free(new_inits);
+		if (new_shutdowns && new_shutdowns != old_shutdowns)
+			free(new_shutdowns);
+
+		stk_module_ids = old_module_ids;
+		stk_handles = old_handles;
+		stk_inits = old_inits;
+		stk_shutdowns = old_shutdowns;
+
+		return -1;
+	}
+
+	stk_module_ids = new_module_ids;
+	stk_handles = new_handles;
+	stk_inits = new_inits;
+	stk_shutdowns = new_shutdowns;
+
+	return 0;
+}
+
 void stk_module_unload_all(void)
 {
 	size_t i;
