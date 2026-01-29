@@ -15,12 +15,13 @@ void *platform_load_library(const char *path);
 void platform_unload_library(void *handle);
 void *platform_get_symbol(void *handle, const char *symbol);
 
-typedef void (*stk_module_func)(void);
+typedef int (*stk_init_mod_func)(void);
+typedef void (*stk_shutdown_mod_func)(void);
 
 char (*stk_module_ids)[STK_MOD_ID_BUFFER] = NULL;
 void **stk_handles = NULL;
-stk_module_func *stk_inits = NULL;
-stk_module_func *stk_shutdowns = NULL;
+stk_init_mod_func *stk_inits = NULL;
+stk_shutdown_mod_func *stk_shutdowns = NULL;
 
 extern uint8_t stk_initialized;
 
@@ -79,11 +80,13 @@ int is_mod_loaded(const char *module_name)
 int stk_module_load(const char *path, int index)
 {
 	void *handle;
-	stk_module_func init_func, shutdown_func;
+	stk_init_mod_func init_func;
+	stk_shutdown_mod_func shutdown_func;
 	char module_id[STK_MOD_ID_BUFFER];
 	union {
 		void *obj;
-		stk_module_func func;
+		stk_init_mod_func init_func;
+		stk_shutdown_mod_func shutdown_func;
 	} u;
 
 	handle = platform_load_library(path);
@@ -91,10 +94,10 @@ int stk_module_load(const char *path, int index)
 		return -1;
 
 	u.obj = platform_get_symbol(handle, stk_mod_init_name);
-	init_func = u.func;
+	init_func = u.init_func;
 
 	u.obj = platform_get_symbol(handle, stk_mod_shutdown_name);
-	shutdown_func = u.func;
+	shutdown_func = u.shutdown_func;
 
 	if (!init_func || !shutdown_func) {
 		platform_unload_library(handle);
@@ -156,8 +159,8 @@ int stk_module_init_memory(size_t capacity)
 {
 	stk_module_ids = malloc(capacity * sizeof(*stk_module_ids));
 	stk_handles = malloc(capacity * sizeof(void *));
-	stk_inits = malloc(capacity * sizeof(stk_module_func));
-	stk_shutdowns = malloc(capacity * sizeof(stk_module_func));
+	stk_inits = malloc(capacity * sizeof(stk_init_mod_func));
+	stk_shutdowns = malloc(capacity * sizeof(stk_shutdown_mod_func));
 
 	if (!stk_module_ids || !stk_handles || !stk_inits || !stk_shutdowns) {
 		stk_module_free_memory();
@@ -171,13 +174,13 @@ int stk_module_realloc_memory(size_t new_capacity)
 {
 	char (*new_module_ids)[STK_MOD_ID_BUFFER];
 	void **new_handles;
-	stk_module_func *new_inits;
-	stk_module_func *new_shutdowns;
+	stk_init_mod_func *new_inits;
+	stk_shutdown_mod_func *new_shutdowns;
 
 	char (*old_module_ids)[STK_MOD_ID_BUFFER] = stk_module_ids;
 	void **old_handles = stk_handles;
-	stk_module_func *old_inits = stk_inits;
-	stk_module_func *old_shutdowns = stk_shutdowns;
+	stk_init_mod_func *old_inits = stk_inits;
+	stk_shutdown_mod_func *old_shutdowns = stk_shutdowns;
 
 	if (new_capacity == 0) {
 		stk_module_free_memory();
