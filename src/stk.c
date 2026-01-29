@@ -121,12 +121,17 @@ size_t stk_poll(void)
 		goto finish_poll;
 
 	for (i = 0; i < file_count; ++i) {
-		if (events[i] == STK_MOD_RELOAD)
-			++reload_count;
-		else if (events[i] == STK_MOD_LOAD)
+		switch (events[i]) {
+		case STK_MOD_LOAD:
 			++load_count;
-		else if (events[i] == STK_MOD_UNLOAD)
+			break;
+		case STK_MOD_RELOAD:
+			++reload_count;
+			break;
+		case STK_MOD_UNLOAD:
 			++unload_count;
+			break;
+		}
 	}
 
 	reloaded_mod_indices = malloc(reload_count * sizeof(int));
@@ -136,21 +141,26 @@ size_t stk_poll(void)
 
 	for (i = 0; i < file_count; ++i) {
 		extract_module_id(file_list[i], mod_id);
+		switch (events[i]) {
 
-		if (events[i] == STK_MOD_RELOAD) {
+		case STK_MOD_LOAD:
+			loaded_mod_indices[load_index++] = i;
+			break;
+		case STK_MOD_UNLOAD:
 			reloaded_mod_file_indices[reload_index] = i;
 			reloaded_mod_indices[reload_index++] =
 			    is_mod_loaded(mod_id);
-		} else if (events[i] == STK_MOD_LOAD) {
-			loaded_mod_indices[load_index++] = i;
-		} else if (events[i] == STK_MOD_UNLOAD) {
+			break;
+		case STK_MOD_RELOAD:
 			unloaded_mod_indices[unload_index++] =
 			    is_mod_loaded(mod_id);
+			break;
 		}
 	}
 
 	if (load_count > unload_count)
 		goto handle_grow;
+
 	goto begin_operations;
 
 handle_grow:
@@ -158,7 +168,6 @@ handle_grow:
 	new_capacity = module_count + remaining_loads;
 	if (stk_module_realloc_memory(new_capacity) != 0)
 		goto free_poll;
-	goto begin_operations;
 
 begin_operations:
 	for (i = 0; i < unload_count; ++i)
