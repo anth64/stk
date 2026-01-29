@@ -13,6 +13,8 @@
 /* Modules */
 #define STK_MOD_INIT_SUCCESS 0
 #define STK_MOD_INIT_FAILURE 1
+#define STK_MOD_LIBRARY_LOAD_ERROR 2
+#define STK_MOD_SYMBOL_NOT_FOUND_ERROR 3
 
 #if defined(__linux__) || defined(_WIN32)
 #define STK_EVENT_BUFFER 4096

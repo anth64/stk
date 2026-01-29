@@ -91,7 +91,7 @@ int stk_module_load(const char *path, int index)
 
 	handle = platform_load_library(path);
 	if (!handle)
-		return -1;
+		return STK_MOD_LIBRARY_LOAD_ERROR;
 
 	u.obj = platform_get_symbol(handle, stk_mod_init_name);
 	init_func = u.init_func;
@@ -101,7 +101,7 @@ int stk_module_load(const char *path, int index)
 
 	if (!init_func || !shutdown_func) {
 		platform_unload_library(handle);
-		return -2;
+		return STK_MOD_SYMBOL_NOT_FOUND_ERROR;
 	}
 
 	extract_module_id(path, module_id);
