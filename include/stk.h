@@ -4,10 +4,15 @@
 #include "stk_version.h"
 #include <stdlib.h>
 
+/* Buffers */
 #define STK_MOD_DIR_BUFFER 256
 #define STK_MOD_ID_BUFFER 64
 #define STK_PATH_MAX 256
 #define STK_PATH_MAX_OS 4096
+
+/* Modules */
+#define STK_MOD_INIT_SUCCESS 0
+#define STK_MOD_INIT_FAILURE 1
 
 #if defined(__linux__) || defined(_WIN32)
 #define STK_EVENT_BUFFER 4096

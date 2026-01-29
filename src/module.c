@@ -104,10 +104,12 @@ int stk_module_load(const char *path, int index)
 		return -2;
 	}
 
-	if (index == -1)
-		index = module_count;
-
 	extract_module_id(path, module_id);
+
+	if (init_func() != STK_MOD_INIT_SUCCESS) {
+		platform_unload_library(handle);
+		return -3;
+	}
 
 	strncpy(stk_module_ids[index], module_id, STK_MOD_ID_BUFFER - 1);
 	stk_module_ids[index][STK_MOD_ID_BUFFER - 1] = '\0';
@@ -115,8 +117,6 @@ int stk_module_load(const char *path, int index)
 	stk_handles[index] = handle;
 	stk_inits[index] = init_func;
 	stk_shutdowns[index] = shutdown_func;
-
-	init_func(); /* TODO eventually return an int for success */
 
 	return 0;
 }
