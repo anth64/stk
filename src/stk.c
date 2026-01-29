@@ -5,11 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef void (*stk_module_func)(void);
+typedef int (*stk_init_mod_func)(void);
+typedef void (*stk_shutdown_mod_func)(void);
 
 extern void **stk_handles;
-extern stk_module_func *stk_inits;
-extern stk_module_func *stk_shutdowns;
+extern stk_init_mod_func *stk_inits;
+extern stk_shutdown_mod_func *stk_shutdowns;
 extern char (*stk_module_ids)[STK_MOD_ID_BUFFER];
 
 extern size_t module_count;

@@ -11,12 +11,12 @@
 #define STK_PATH_SEP '/'
 #endif
 
+typedef int (*stk_init_mod_func)(void);
+typedef void (*stk_shutdown_mod_func)(void);
+
 void *platform_load_library(const char *path);
 void platform_unload_library(void *handle);
 void *platform_get_symbol(void *handle, const char *symbol);
-
-typedef int (*stk_init_mod_func)(void);
-typedef void (*stk_shutdown_mod_func)(void);
 
 char (*stk_module_ids)[STK_MOD_ID_BUFFER] = NULL;
 void **stk_handles = NULL;
@@ -108,7 +108,7 @@ int stk_module_load(const char *path, int index)
 
 	if (init_func() != STK_MOD_INIT_SUCCESS) {
 		platform_unload_library(handle);
-		return -3;
+		return STK_MOD_INIT_FAILURE;
 	}
 
 	strncpy(stk_module_ids[index], module_id, STK_MOD_ID_BUFFER - 1);
