@@ -32,14 +32,21 @@ void extract_module_id(const char *path, char *out_id);
 static uint8_t is_file_ready(const char *dir_path, const char *filename)
 {
 	char full_path[STK_PATH_MAX_OS];
+	DWORD size;
 	HANDLE h;
 
 	sprintf(full_path, "%s\\%s", dir_path, filename);
-	h = CreateFileA(full_path, GENERIC_READ, 0, NULL, OPEN_EXISTING,
+	h = CreateFileA(full_path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
 			FILE_ATTRIBUTE_NORMAL, NULL);
 	if (h == INVALID_HANDLE_VALUE)
 		return 0;
+
+	size = GetFileSize(h, NULL);
 	CloseHandle(h);
+
+	if (size == INVALID_FILE_SIZE || size < 1024)
+		return 0;
+
 	return 1;
 }
 #endif
@@ -93,13 +100,19 @@ int platform_remove_file(const char *path)
 
 int platform_copy_file(const char *from, const char *to)
 {
+	char buf[STK_PATH_MAX_OS];
+	int ret = -1;
 #ifdef _WIN32
-	return CopyFileA(from, to, FALSE) ? 0 : -1;
+	sprintf(buf, "%s.tmp", to);
+	if (CopyFileA(from, buf, FALSE)) {
+		if (MoveFileExA(buf, to, MOVEFILE_REPLACE_EXISTING))
+			ret = 0;
+		else
+			DeleteFileA(buf);
+	}
 #else
 	FILE *src = NULL, *dst = NULL;
-	char buf[STK_PATH_MAX_OS];
 	size_t n;
-	int ret = -1;
 
 	src = fopen(from, "rb");
 	if (!src)
@@ -117,12 +130,11 @@ int platform_copy_file(const char *from, const char *to)
 cleanup:
 	if (src)
 		fclose(src);
-
 	if (dst)
 		fclose(dst);
+#endif
 
 	return ret;
-#endif
 }
 
 int platform_remove_dir(const char *path)
