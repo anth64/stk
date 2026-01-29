@@ -5,6 +5,12 @@
 
 #define STK_MOD_FUNC_NAME_BUFFER 64
 
+#ifdef _WIN32
+#define STK_PATH_SEP '\\'
+#else
+#define STK_PATH_SEP '/'
+#endif
+
 void *platform_load_library(const char *path);
 void platform_unload_library(void *handle);
 void *platform_get_symbol(void *handle, const char *symbol);
@@ -28,18 +34,10 @@ size_t stk_module_count(void) { return module_count; }
 
 void extract_module_id(const char *path, char *out_id)
 {
-	const char *basename;
 	char *dot;
+	const char *basename = strrchr(path, STK_PATH_SEP);
 
-	basename = strrchr(path, '/');
-#ifdef _WIN32
-	if (!basename)
-		basename = strrchr(path, '\\');
-#endif
-	if (!basename)
-		basename = path;
-	else
-		basename++;
+	basename = (basename) ? basename + 1 : path;
 
 	strncpy(out_id, basename, STK_MOD_ID_BUFFER - 1);
 	out_id[STK_MOD_ID_BUFFER - 1] = '\0';
@@ -81,10 +79,7 @@ int is_mod_loaded(const char *module_name)
 int stk_module_load(const char *path, int index)
 {
 	void *handle;
-	stk_module_func init_func;
-	stk_module_func shutdown_func;
-	const char *basename;
-	char *dot;
+	stk_module_func init_func, shutdown_func;
 	char module_id[STK_MOD_ID_BUFFER];
 	union {
 		void *obj;
@@ -109,18 +104,7 @@ int stk_module_load(const char *path, int index)
 	if (index == -1)
 		index = module_count;
 
-	basename = strrchr(path, '/');
-	if (!basename)
-		basename = path;
-	else
-		basename++;
-
-	strncpy(module_id, basename, STK_MOD_ID_BUFFER - 1);
-	module_id[STK_MOD_ID_BUFFER - 1] = '\0';
-
-	dot = strrchr(module_id, '.');
-	if (dot)
-		*dot = '\0';
+	extract_module_id(path, module_id);
 
 	strncpy(stk_module_ids[index], module_id, STK_MOD_ID_BUFFER - 1);
 	stk_module_ids[index][STK_MOD_ID_BUFFER - 1] = '\0';
@@ -129,7 +113,7 @@ int stk_module_load(const char *path, int index)
 	stk_inits[index] = init_func;
 	stk_shutdowns[index] = shutdown_func;
 
-	init_func(); /* TODO eventually, this should have some sort of check */
+	init_func(); /* TODO eventually return an int for success */
 
 	return 0;
 }

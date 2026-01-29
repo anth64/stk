@@ -142,7 +142,6 @@ size_t stk_poll(void)
 	for (i = 0; i < file_count; ++i) {
 		extract_module_id(file_list[i], mod_id);
 		switch (events[i]) {
-
 		case STK_MOD_LOAD:
 			loaded_mod_indices[load_index++] = i;
 			break;
@@ -240,6 +239,7 @@ trim_arrays:
 			++write_pos;
 		}
 	}
+
 	module_count = write_pos;
 	stk_module_realloc_memory(module_count);
 
