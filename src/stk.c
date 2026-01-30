@@ -53,12 +53,27 @@ static void build_path(char *dest, size_t dest_size, const char *dir,
 	strncat(dest, file, dest_size - strlen(dest) - 1);
 }
 
+static const char *stk_error_string(int error_code)
+{
+	switch (error_code) {
+	case STK_MOD_LIBRARY_LOAD_ERROR:
+		return "library load error";
+	case STK_MOD_SYMBOL_NOT_FOUND_ERROR:
+		return "symbol not found";
+	case STK_MOD_INIT_FAILURE:
+		return "init failure";
+	default:
+		return "unknown error";
+	}
+}
+
 int stk_init(void)
 {
 	char (*files)[STK_PATH_MAX] = NULL;
-	size_t file_count, i;
+	size_t file_count, i, successful_loads = 0;
 	char full_path[STK_PATH_MAX_OS];
 	char tmp_path[STK_PATH_MAX_OS];
+	int load_result;
 
 	platform_mkdir(stk_tmp_dir);
 	files = platform_directory_init_scan(stk_mod_dir, &file_count);
@@ -72,8 +87,26 @@ int stk_init(void)
 	for (i = 0; i < file_count; ++i) {
 		build_path(full_path, sizeof(full_path), stk_mod_dir, files[i]);
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir, files[i]);
-		platform_copy_file(full_path, tmp_path);
-		stk_module_load_init(tmp_path, i);
+
+		if (platform_copy_file(full_path, tmp_path) != 0) {
+			stk_log(stderr,
+				"[stk] Failed to copy %s to temp directory",
+				files[i]);
+			continue;
+		}
+
+		load_result = stk_module_load_init(tmp_path, successful_loads);
+
+		if (load_result != STK_MOD_INIT_SUCCESS) {
+			stk_log(stderr, "[stk] Failed to load module %s: %s",
+				files[i], stk_error_string(load_result));
+		} else {
+			successful_loads++;
+		}
+	}
+
+	if (successful_loads < file_count) {
+		stk_module_realloc_memory(successful_loads);
 	}
 
 	free(files);
@@ -114,6 +147,8 @@ size_t stk_poll(void)
 	size_t write_pos, read_pos;
 	char full_path[STK_PATH_MAX_OS], tmp_path[STK_PATH_MAX_OS];
 	char mod_id[STK_MOD_ID_BUFFER];
+	int load_result;
+	size_t successful_appends = 0;
 
 	events = platform_directory_watch_check(watch_handle, &file_list,
 						&file_count, stk_module_ids,
@@ -177,28 +212,50 @@ begin_operations:
 		stk_module_unload(reloaded_mod_indices[i]);
 
 	for (i = 0; i < reload_count; ++i) {
-		int file_idx = reloaded_mod_file_indices[i];
-		int mod_idx = reloaded_mod_indices[i];
+		int file_index = reloaded_mod_file_indices[i];
+		int mod_index = reloaded_mod_indices[i];
 
 		build_path(full_path, sizeof(full_path), stk_mod_dir,
-			   file_list[file_idx]);
+			   file_list[file_index]);
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
-			   file_list[file_idx]);
-		platform_copy_file(full_path, tmp_path);
-		stk_module_load(tmp_path, mod_idx);
+			   file_list[file_index]);
+
+		if (platform_copy_file(full_path, tmp_path) != 0) {
+			stk_log(stderr, "[stk] Failed to copy %s for reload",
+				file_list[file_index]);
+			continue;
+		}
+
+		load_result = stk_module_load(tmp_path, mod_index);
+		if (load_result != STK_MOD_INIT_SUCCESS) {
+			stk_log(stderr, "[stk] Failed to reload module %s: %s",
+				file_list[file_index],
+				stk_error_string(load_result));
+		}
 	}
 
 	holes_to_fill = (load_count < unload_count) ? load_count : unload_count;
 	for (i = 0; i < holes_to_fill; ++i) {
-		int target_idx = unloaded_mod_indices[i];
-		int file_idx = loaded_mod_indices[i];
+		int target_index = unloaded_mod_indices[i];
+		int file_index = loaded_mod_indices[i];
 
 		build_path(full_path, sizeof(full_path), stk_mod_dir,
-			   file_list[file_idx]);
+			   file_list[file_index]);
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
-			   file_list[file_idx]);
-		platform_copy_file(full_path, tmp_path);
-		stk_module_load(tmp_path, target_idx);
+			   file_list[file_index]);
+
+		if (platform_copy_file(full_path, tmp_path) != 0) {
+			stk_log(stderr, "[stk] Failed to copy %s for loading",
+				file_list[file_index]);
+			continue;
+		}
+
+		load_result = stk_module_load(tmp_path, target_index);
+		if (load_result != STK_MOD_INIT_SUCCESS) {
+			stk_log(stderr, "[stk] Failed to load module %s: %s",
+				file_list[file_index],
+				stk_error_string(load_result));
+		}
 	}
 
 	if (load_count > unload_count)
@@ -211,16 +268,36 @@ begin_operations:
 
 append_modules:
 	for (; i < load_count; ++i) {
-		int file_idx = loaded_mod_indices[i];
+		int file_index = loaded_mod_indices[i];
 
 		build_path(full_path, sizeof(full_path), stk_mod_dir,
-			   file_list[file_idx]);
+			   file_list[file_index]);
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
-			   file_list[file_idx]);
-		platform_copy_file(full_path, tmp_path);
-		stk_module_load(tmp_path, module_count);
-		++module_count;
+			   file_list[file_index]);
+
+		if (platform_copy_file(full_path, tmp_path) != 0) {
+			stk_log(stderr, "[stk] Failed to copy %s for loading",
+				file_list[file_index]);
+			continue;
+		}
+
+		load_result = stk_module_load(tmp_path, module_count +
+							    successful_appends);
+		if (load_result != STK_MOD_INIT_SUCCESS) {
+			stk_log(stderr, "[stk] Failed to load module %s: %s",
+				file_list[file_index],
+				stk_error_string(load_result));
+		} else {
+			successful_appends++;
+		}
 	}
+
+	module_count += successful_appends;
+
+	if (successful_appends < (load_count - holes_to_fill)) {
+		stk_module_realloc_memory(module_count);
+	}
+
 	goto free_poll;
 
 trim_arrays:
