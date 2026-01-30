@@ -146,12 +146,12 @@ size_t stk_poll(void)
 		case STK_MOD_LOAD:
 			loaded_mod_indices[load_index++] = i;
 			break;
-		case STK_MOD_UNLOAD:
+		case STK_MOD_RELOAD:
 			reloaded_mod_file_indices[reload_index] = i;
 			reloaded_mod_indices[reload_index++] =
 			    is_mod_loaded(mod_id);
 			break;
-		case STK_MOD_RELOAD:
+		case STK_MOD_UNLOAD:
 			unloaded_mod_indices[unload_index++] =
 			    is_mod_loaded(mod_id);
 			break;
