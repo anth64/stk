@@ -80,28 +80,32 @@ typedef struct {
 } platform_watch_context_t;
 #endif
 
-int platform_mkdir(const char *path)
+uint8_t platform_mkdir(const char *path)
 {
 #ifdef _WIN32
-	return CreateDirectoryA(path, NULL) ? 0 : -1;
+	return CreateDirectoryA(path, NULL) ? STK_PLATFORM_OPERATION_SUCCESS
+					    : STK_PLATFORM_MKDIR_ERROR;
 #else
-	return mkdir(path, 0755);
+	return mkdir(path, 0755) == 0 ? STK_PLATFORM_OPERATION_SUCCESS
+				      : STK_PLATFORM_MKDIR_ERROR;
 #endif
 }
 
 int platform_remove_file(const char *path)
 {
 #ifdef _WIN32
-	return DeleteFileA(path) ? 0 : -1;
+	return DeleteFileA(path) ? STK_PLATFORM_OPERATION_SUCCESS
+				 : STK_PLATFORM_REMOVE_FILE_ERROR;
 #else
-	return unlink(path);
+	return unlink(path) == 0 ? STK_PLATFORM_OPERATION_SUCCESS
+				 : STK_PLATFORM_REMOVE_FILE_ERROR;
 #endif
 }
 
-int platform_copy_file(const char *from, const char *to)
+uint8_t platform_copy_file(const char *from, const char *to)
 {
 	char buf[STK_PATH_MAX_OS];
-	int ret = -1;
+	int ret = STK_PLATFORM_FILE_COPY_ERROR;
 #ifdef _WIN32
 	sprintf(buf, "%s.tmp", to);
 	if (CopyFileA(from, buf, FALSE)) {
@@ -125,7 +129,7 @@ int platform_copy_file(const char *from, const char *to)
 	while ((n = fread(buf, 1, sizeof(buf), src)) > 0)
 		fwrite(buf, 1, n, dst);
 
-	ret = 0;
+	ret = STK_PLATFORM_OPERATION_SUCCESS;
 
 cleanup:
 	if (src)
@@ -137,7 +141,7 @@ cleanup:
 	return ret;
 }
 
-int platform_remove_dir(const char *path)
+uint8_t platform_remove_dir(const char *path)
 {
 #ifdef _WIN32
 	WIN32_FIND_DATAA fd;
@@ -161,7 +165,8 @@ int platform_remove_dir(const char *path)
 	FindClose(h);
 
 remove_dir:
-	return RemoveDirectoryA(path) ? 0 : -1;
+	return RemoveDirectoryA(path) ? STK_PLATFORM_OPERATION_SUCCESS
+				      : STK_PLATFORM_REMOVE_DIR_ERROR;
 #else
 	DIR *dir;
 	struct dirent *entry;
@@ -169,7 +174,7 @@ remove_dir:
 
 	dir = opendir(path);
 	if (!dir)
-		return -1;
+		return STK_PLATFORM_REMOVE_DIR_ERROR;
 
 loop:
 	entry = readdir(dir);
@@ -185,7 +190,8 @@ loop:
 
 loop_end:
 	closedir(dir);
-	return rmdir(path);
+	return rmdir(path) == 0 ? STK_PLATFORM_OPERATION_SUCCESS
+				: STK_PLATFORM_REMOVE_DIR_ERROR;
 #endif
 }
 
@@ -426,6 +432,7 @@ void *platform_directory_watch_start(const char *path)
 		return NULL;
 
 	strncpy(ctx->path, path, STK_PATH_MAX - 1);
+
 #ifdef _WIN32
 	ctx->watch.change_handle =
 	    CreateFileA(path, FILE_LIST_DIRECTORY,
@@ -433,12 +440,12 @@ void *platform_directory_watch_start(const char *path)
 			NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
 
 	if (ctx->watch.change_handle == INVALID_HANDLE_VALUE)
-		goto done;
+		goto error_cleanup;
 
 	sprintf(s, "%s\\*", path);
 	h = FindFirstFileA(s, &fd);
 	if (h == INVALID_HANDLE_VALUE)
-		goto done;
+		goto error_cleanup;
 
 	do {
 		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
@@ -452,11 +459,11 @@ void *platform_directory_watch_start(const char *path)
 
 	ctx->snaps = malloc(count * sizeof(platform_snapshot_t));
 	if (!ctx->snaps)
-		goto done;
+		goto error_cleanup;
 
 	h = FindFirstFileA(s, &fd);
 	if (h == INVALID_HANDLE_VALUE)
-		goto done;
+		goto error_cleanup;
 
 	do {
 		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
@@ -472,7 +479,6 @@ void *platform_directory_watch_start(const char *path)
 	ctx->count = i;
 
 #else
-
 	ctx->watch.k.kq = kqueue();
 	ctx->watch.k.dir_fd = open(path, O_RDONLY);
 	d = opendir(path);
@@ -531,6 +537,17 @@ bsd_setup:
 done:
 #endif
 	return ctx;
+
+#ifdef _WIN32
+error_cleanup:
+	if (ctx) {
+		if (ctx->watch.change_handle != INVALID_HANDLE_VALUE)
+			CloseHandle(ctx->watch.change_handle);
+		free(ctx->snaps);
+		free(ctx);
+	}
+	return NULL;
+#endif
 #endif
 }
 

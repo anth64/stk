@@ -10,11 +10,24 @@
 #define STK_PATH_MAX 256
 #define STK_PATH_MAX_OS 4096
 
-/* Modules */
+/* Initialization return codes */
+#define STK_INIT_SUCCESS 0
+#define STK_INIT_MEMORY_ERROR 1
+#define STK_INIT_TMPDIR_ERROR 2
+#define STK_INIT_WATCH_ERROR 3
+
+/* Module loading return codes */
 #define STK_MOD_INIT_SUCCESS 0
 #define STK_MOD_INIT_FAILURE 1
 #define STK_MOD_LIBRARY_LOAD_ERROR 2
 #define STK_MOD_SYMBOL_NOT_FOUND_ERROR 3
+
+/* Platform return codes */
+#define STK_PLATFORM_OPERATION_SUCCESS 0
+#define STK_PLATFORM_FILE_COPY_ERROR 1
+#define STK_PLATFORM_MKDIR_ERROR 2
+#define STK_PLATFORM_REMOVE_DIR_ERROR 3
+#define STK_PLATFORM_REMOVE_FILE_ERROR 4
 
 #if defined(__linux__) || defined(_WIN32)
 #define STK_EVENT_BUFFER 4096

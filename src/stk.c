@@ -75,11 +75,28 @@ int stk_init(void)
 	char tmp_path[STK_PATH_MAX_OS];
 	int load_result;
 
-	platform_mkdir(stk_tmp_dir);
+	if (platform_mkdir(stk_tmp_dir) != STK_PLATFORM_OPERATION_SUCCESS) {
+		char (*test_scan)[STK_PATH_MAX];
+		size_t test_count;
+
+		test_scan =
+		    platform_directory_init_scan(stk_tmp_dir, &test_count);
+		if (test_scan)
+			free(test_scan);
+		if (!test_scan && test_count == 0) {
+			stk_log(stderr,
+				"[stk] FATAL: Cannot create temp directory: %s",
+				stk_tmp_dir);
+			return STK_INIT_TMPDIR_ERROR;
+		}
+	}
+
 	files = platform_directory_init_scan(stk_mod_dir, &file_count);
 
-	if (file_count > 0 && stk_module_init_memory(file_count) != 0)
-		return -1;
+	if (file_count > 0 && stk_module_init_memory(file_count) != 0) {
+		stk_log(stderr, "[stk] FATAL: Memory allocation failed");
+		return STK_INIT_MEMORY_ERROR;
+	}
 
 	if (!files)
 		goto scanned;
@@ -88,7 +105,8 @@ int stk_init(void)
 		build_path(full_path, sizeof(full_path), stk_mod_dir, files[i]);
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir, files[i]);
 
-		if (platform_copy_file(full_path, tmp_path) != 0) {
+		if (platform_copy_file(full_path, tmp_path) !=
+		    STK_PLATFORM_OPERATION_SUCCESS) {
 			stk_log(stderr,
 				"[stk] Failed to copy %s to temp directory",
 				files[i]);
@@ -113,12 +131,20 @@ int stk_init(void)
 
 scanned:
 	watch_handle = platform_directory_watch_start(stk_mod_dir);
+	if (!watch_handle) {
+		stk_log(stderr,
+			"[stk] FATAL: Cannot start directory watch on %s",
+			stk_mod_dir);
+		stk_module_unload_all();
+		return STK_INIT_WATCH_ERROR;
+	}
+
 	stk_log(stdout, "[stk] stk v%s initialized! Loaded %lu mod%s from %s/",
 		STK_VERSION_STRING, module_count, module_count != 1 ? "s" : "",
 		stk_mod_dir);
 
 	stk_initialized = 1;
-	return 0;
+	return STK_INIT_SUCCESS;
 }
 
 void stk_shutdown(void)
@@ -129,7 +155,14 @@ void stk_shutdown(void)
 	}
 
 	stk_module_unload_all();
-	platform_remove_dir(stk_tmp_dir);
+
+	if (platform_remove_dir(stk_tmp_dir) !=
+	    STK_PLATFORM_OPERATION_SUCCESS) {
+		stk_log(stderr,
+			"[stk] Warning: failed to remove temp directory %s",
+			stk_tmp_dir);
+	}
+
 	stk_initialized = 0;
 	stk_log(stdout, "[stk] stk shutdown");
 }
@@ -220,7 +253,8 @@ begin_operations:
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
 			   file_list[file_index]);
 
-		if (platform_copy_file(full_path, tmp_path) != 0) {
+		if (platform_copy_file(full_path, tmp_path) !=
+		    STK_PLATFORM_OPERATION_SUCCESS) {
 			stk_log(stderr, "[stk] Failed to copy %s for reload",
 				file_list[file_index]);
 			continue;
@@ -244,7 +278,8 @@ begin_operations:
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
 			   file_list[file_index]);
 
-		if (platform_copy_file(full_path, tmp_path) != 0) {
+		if (platform_copy_file(full_path, tmp_path) !=
+		    STK_PLATFORM_OPERATION_SUCCESS) {
 			stk_log(stderr, "[stk] Failed to copy %s for loading",
 				file_list[file_index]);
 			continue;
@@ -275,7 +310,8 @@ append_modules:
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
 			   file_list[file_index]);
 
-		if (platform_copy_file(full_path, tmp_path) != 0) {
+		if (platform_copy_file(full_path, tmp_path) !=
+		    STK_PLATFORM_OPERATION_SUCCESS) {
 			stk_log(stderr, "[stk] Failed to copy %s for loading",
 				file_list[file_index]);
 			continue;
