@@ -585,7 +585,7 @@ stk_module_event_t *platform_directory_watch_check(
 	int fd = (int)(long)handle;
 	char buf[STK_EVENT_BUFFER];
 	ssize_t len;
-	size_t idx = 0, count = 0;
+	size_t index = 0, count = 0;
 	stk_module_event_t *evs;
 	char *ptr, *end;
 	struct inotify_event *e;
@@ -625,7 +625,7 @@ stk_module_event_t *platform_directory_watch_check(
 	}
 
 	ptr = buf;
-	while (ptr < end && idx < count) {
+	while (ptr < end && index < count) {
 		e = (struct inotify_event *)ptr;
 		if (e->len && is_valid_module_file(e->name)) {
 			if (e->mask & (IN_DELETE | IN_MOVED_FROM)) {
@@ -654,7 +654,7 @@ stk_module_event_t *platform_directory_watch_check(
 				}
 			}
 
-			strncpy((*file_list)[idx], e->name, STK_PATH_MAX - 1);
+			strncpy((*file_list)[index], e->name, STK_PATH_MAX - 1);
 
 			event_type = STK_MOD_UNLOAD;
 			if (e->mask & (IN_CLOSE_WRITE | IN_MOVED_TO)) {
@@ -666,19 +666,19 @@ stk_module_event_t *platform_directory_watch_check(
 					event_type = STK_MOD_LOAD;
 			}
 
-			evs[idx++] = event_type;
+			evs[index++] = event_type;
 		}
 
 		ptr += sizeof(struct inotify_event) + e->len;
 	}
 
-	*out_count = idx;
+	*out_count = index;
 	return evs;
 
 #else
 	platform_watch_context_t *ctx = (platform_watch_context_t *)handle;
 	platform_snapshot_t *new_snaps = NULL;
-	size_t new_count = 0, i, j, ev_idx = 0;
+	size_t new_count = 0, i, j, ev_index = 0;
 	stk_module_event_t *evs = NULL;
 	int found;
 #ifdef _WIN32
@@ -811,10 +811,10 @@ build_diff:
 					    &new_snaps[j].mtime) != 0) {
 				if (is_file_ready(ctx->path,
 						  new_snaps[j].filename)) {
-					strncpy((*file_list)[ev_idx],
+					strncpy((*file_list)[ev_index],
 						new_snaps[j].filename,
 						STK_PATH_MAX - 1);
-					evs[ev_idx++] = STK_MOD_RELOAD;
+					evs[ev_index++] = STK_MOD_RELOAD;
 				} else {
 					new_snaps[j].mtime =
 					    ctx->snaps[i].mtime;
@@ -822,19 +822,19 @@ build_diff:
 			}
 #else
 			if (ctx->snaps[i].mtime != new_snaps[j].mtime) {
-				strncpy((*file_list)[ev_idx],
+				strncpy((*file_list)[ev_index],
 					new_snaps[j].filename,
 					STK_PATH_MAX - 1);
-				evs[ev_idx++] = STK_MOD_RELOAD;
+				evs[ev_index++] = STK_MOD_RELOAD;
 			}
 #endif
 			break;
 		}
 
 		if (!found) {
-			strncpy((*file_list)[ev_idx], ctx->snaps[i].filename,
+			strncpy((*file_list)[ev_index], ctx->snaps[i].filename,
 				STK_PATH_MAX - 1);
-			evs[ev_idx++] = STK_MOD_UNLOAD;
+			evs[ev_index++] = STK_MOD_UNLOAD;
 		}
 	}
 
@@ -849,19 +849,19 @@ build_diff:
 		}
 
 		if (!found) {
-			strncpy((*file_list)[ev_idx], new_snaps[j].filename,
+			strncpy((*file_list)[ev_index], new_snaps[j].filename,
 				STK_PATH_MAX - 1);
-			evs[ev_idx++] = STK_MOD_LOAD;
+			evs[ev_index++] = STK_MOD_LOAD;
 		}
 	}
 
-	if (ev_idx == 0)
+	if (ev_index == 0)
 		goto cleanup_empty;
 
 	free(ctx->snaps);
 	ctx->snaps = new_snaps;
 	ctx->count = new_count;
-	*out_count = ev_idx;
+	*out_count = ev_index;
 	return evs;
 
 cleanup_error:
