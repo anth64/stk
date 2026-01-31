@@ -72,7 +72,7 @@ int is_mod_loaded(const char *module_name)
 	return -1;
 }
 
-int stk_module_load(const char *path, int index)
+uint8_t stk_module_load(const char *path, int index)
 {
 	void *handle;
 	stk_init_mod_func init_func;
@@ -113,15 +113,15 @@ int stk_module_load(const char *path, int index)
 	stk_inits[index] = init_func;
 	stk_shutdowns[index] = shutdown_func;
 
-	return 0;
+	return STK_MOD_INIT_SUCCESS;
 }
 
-int stk_module_load_init(const char *path, int index)
+uint8_t stk_module_load_init(const char *path, int index)
 {
 	int result;
 	result = stk_module_load(path, index);
 
-	if (result == 0)
+	if (result == STK_MOD_INIT_SUCCESS)
 		++module_count;
 
 	return result;
@@ -150,7 +150,7 @@ void stk_module_free_memory(void)
 	stk_shutdowns = NULL;
 }
 
-int stk_module_init_memory(size_t capacity)
+uint8_t stk_module_init_memory(size_t capacity)
 {
 	stk_module_ids = malloc(capacity * sizeof(*stk_module_ids));
 	stk_handles = malloc(capacity * sizeof(void *));
@@ -159,13 +159,13 @@ int stk_module_init_memory(size_t capacity)
 
 	if (!stk_module_ids || !stk_handles || !stk_inits || !stk_shutdowns) {
 		stk_module_free_memory();
-		return -1;
+		return STK_INIT_MEMORY_ERROR;
 	}
 
-	return 0;
+	return STK_INIT_SUCCESS;
 }
 
-int stk_module_realloc_memory(size_t new_capacity)
+uint8_t stk_module_realloc_memory(size_t new_capacity)
 {
 	char (*new_module_ids)[STK_MOD_ID_BUFFER];
 	void **new_handles;
@@ -204,7 +204,7 @@ int stk_module_realloc_memory(size_t new_capacity)
 		stk_inits = old_inits;
 		stk_shutdowns = old_shutdowns;
 
-		return -1;
+		return STK_MOD_REALLOC_FAILURE;
 	}
 
 	stk_module_ids = new_module_ids;

@@ -286,116 +286,115 @@ void *platform_get_symbol(void *h, const char *s)
 #endif
 }
 
-char (*platform_directory_init_scan(const char *dir_path,
-				    size_t *out_count))[STK_PATH_MAX]
-{
-	size_t count = 0, i = 0;
-	char(*list)[STK_PATH_MAX] = NULL;
+char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
+    [STK_PATH_MAX] {
+	    size_t count = 0, i = 0;
+	    char (*list)[STK_PATH_MAX] = NULL;
 #ifdef _WIN32
-	WIN32_FIND_DATAA fd;
-	HANDLE h;
-	char s[STK_PATH_MAX_OS];
+	    WIN32_FIND_DATAA fd;
+	    HANDLE h;
+	    char s[STK_PATH_MAX_OS];
 
-	sprintf(s, "%s\\*", dir_path);
-	h = FindFirstFileA(s, &fd);
-	if (h == INVALID_HANDLE_VALUE)
-		goto create_and_exit;
+	    sprintf(s, "%s\\*", dir_path);
+	    h = FindFirstFileA(s, &fd);
+	    if (h == INVALID_HANDLE_VALUE)
+		    goto create_and_exit;
 
-	do {
-		if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-			continue;
-		if (is_valid_module_file(fd.cFileName))
-			count++;
-	} while (FindNextFileA(h, &fd));
+	    do {
+		    if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			    continue;
+		    if (is_valid_module_file(fd.cFileName))
+			    count++;
+	    } while (FindNextFileA(h, &fd));
 
-	FindClose(h);
+	    FindClose(h);
 
-	if (count == 0)
-		goto exit;
+	    if (count == 0)
+		    goto exit;
 
-	list = malloc(count * sizeof(*list));
-	if (!list)
-		goto exit;
+	    list = malloc(count * sizeof(*list));
+	    if (!list)
+		    goto exit;
 
-	h = FindFirstFileA(s, &fd);
-	if (h == INVALID_HANDLE_VALUE)
-		goto exit;
+	    h = FindFirstFileA(s, &fd);
+	    if (h == INVALID_HANDLE_VALUE)
+		    goto exit;
 
-	do {
-		if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-			continue;
-		if (is_valid_module_file(fd.cFileName) && i < count)
-			strncpy(list[i++], fd.cFileName, STK_PATH_MAX - 1);
-	} while (FindNextFileA(h, &fd));
+	    do {
+		    if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			    continue;
+		    if (is_valid_module_file(fd.cFileName) && i < count)
+			    strncpy(list[i++], fd.cFileName, STK_PATH_MAX - 1);
+	    } while (FindNextFileA(h, &fd));
 
-	FindClose(h);
-	goto exit;
+	    FindClose(h);
+	    goto exit;
 
-create_and_exit:
-	platform_mkdir(dir_path);
-exit:
-	*out_count = i;
-	return list;
+    create_and_exit:
+	    platform_mkdir(dir_path);
+    exit:
+	    *out_count = i;
+	    return list;
 #else
-	DIR *d;
-	struct dirent *e;
-	struct stat st;
-	char f[STK_PATH_MAX_OS];
+	    DIR *d;
+	    struct dirent *e;
+	    struct stat st;
+	    char f[STK_PATH_MAX_OS];
 
-	d = opendir(dir_path);
-	if (!d)
-		goto create_and_exit;
+	    d = opendir(dir_path);
+	    if (!d)
+		    goto create_and_exit;
 
-count_loop:
-	e = readdir(d);
-	if (!e)
-		goto count_done;
+    count_loop:
+	    e = readdir(d);
+	    if (!e)
+		    goto count_done;
 
-	sprintf(f, "%s/%s", dir_path, e->d_name);
-	if (!is_valid_module_file(e->d_name))
-		goto count_loop;
+	    sprintf(f, "%s/%s", dir_path, e->d_name);
+	    if (!is_valid_module_file(e->d_name))
+		    goto count_loop;
 
-	if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
-		goto count_loop;
+	    if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
+		    goto count_loop;
 
-	count++;
-	goto count_loop;
+	    count++;
+	    goto count_loop;
 
-count_done:
-	if (count == 0)
-		goto close_and_exit;
+    count_done:
+	    if (count == 0)
+		    goto close_and_exit;
 
-	rewinddir(d);
-	list = malloc(count * sizeof(*list));
-	if (!list)
-		goto close_and_exit;
+	    rewinddir(d);
+	    list = malloc(count * sizeof(*list));
+	    if (!list)
+		    goto close_and_exit;
 
-fill_loop:
-	e = readdir(d);
-	if (!e || i >= count)
-		goto close_and_exit;
+    fill_loop:
+	    e = readdir(d);
+	    if (!e || i >= count)
+		    goto close_and_exit;
 
-	sprintf(f, "%s/%s", dir_path, e->d_name);
-	if (!is_valid_module_file(e->d_name))
-		goto fill_loop;
+	    sprintf(f, "%s/%s", dir_path, e->d_name);
+	    if (!is_valid_module_file(e->d_name))
+		    goto fill_loop;
 
-	if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
-		goto fill_loop;
+	    if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
+		    goto fill_loop;
 
-	strncpy(list[i++], e->d_name, STK_PATH_MAX - 1);
-	goto fill_loop;
+	    strncpy(list[i++], e->d_name, STK_PATH_MAX - 1);
+	    goto fill_loop;
 
-create_and_exit:
-	platform_mkdir(dir_path);
-	*out_count = 0;
-	return NULL;
+    create_and_exit:
+	    platform_mkdir(dir_path);
+	    *out_count = 0;
+	    return NULL;
 
-close_and_exit:
-	closedir(d);
-	*out_count = i;
-	return list;
+    close_and_exit:
+	    closedir(d);
+	    *out_count = i;
+	    return list;
 #endif
-}
+    }
 
 #if !defined(__linux__) && !defined(_WIN32)
 static void update_watches(platform_watch_context_t *ctx)

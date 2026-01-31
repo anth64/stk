@@ -30,20 +30,20 @@ void platform_directory_watch_stop(void *handle);
 stk_module_event_t *platform_directory_watch_check(
     void *handle, char (**file_list)[STK_PATH_MAX], size_t *out_count,
     char (*loaded_module_ids)[STK_MOD_ID_BUFFER], const size_t loaded_count);
-int platform_mkdir(const char *path);
-int platform_copy_file(const char *from, const char *to);
-int platform_remove_dir(const char *path);
+uint8_t platform_mkdir(const char *path);
+uint8_t platform_copy_file(const char *from, const char *to);
+uint8_t platform_remove_dir(const char *path);
 
-char *extract_module_id(const char *path, char *out_id);
+void extract_module_id(const char *path, char *out_id);
 int is_mod_loaded(const char *module_id);
 
 size_t stk_module_count(void);
-int stk_module_load(const char *path, int index);
-int stk_module_load_init(const char *path, int index);
+uint8_t stk_module_load(const char *path, int index);
+uint8_t stk_module_load_init(const char *path, int index);
+uint8_t stk_module_init_memory(size_t capacity);
+uint8_t stk_module_realloc_memory(size_t new_capacity);
 void stk_module_unload(size_t index);
 void stk_module_unload_all(void);
-int stk_module_init_memory(size_t capacity);
-int stk_module_realloc_memory(size_t new_capacity);
 
 static void build_path(char *dest, size_t dest_size, const char *dir,
 		       const char *file)
@@ -63,6 +63,8 @@ static const char *stk_error_string(int error_code)
 		return "symbol not found";
 	case STK_MOD_INIT_FAILURE:
 		return "init failure";
+	case STK_MOD_REALLOC_FAILURE:
+		return "memory reallocation failed";
 	default:
 		return "unknown error";
 	}
@@ -86,7 +88,7 @@ int stk_init(void)
 			free(test_scan);
 		if (!test_scan && test_count == 0) {
 			stk_log(stderr,
-				"[stk] FATAL: Cannot create temp directory: %s",
+				"FATAL: Cannot create temp directory: %s",
 				stk_tmp_dir);
 			return STK_INIT_TMPDIR_ERROR;
 		}
@@ -95,7 +97,7 @@ int stk_init(void)
 	files = platform_directory_init_scan(stk_mod_dir, &file_count);
 
 	if (file_count > 0 && stk_module_init_memory(file_count) != 0) {
-		stk_log(stderr, "[stk] FATAL: Memory allocation failed");
+		stk_log(stderr, "FATAL: Memory allocation failed");
 		return STK_INIT_MEMORY_ERROR;
 	}
 
@@ -108,8 +110,7 @@ int stk_init(void)
 
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(stderr,
-				"[stk] Failed to copy %s to temp directory",
+			stk_log(stderr, "Failed to copy %s to temp directory",
 				files[i]);
 			continue;
 		}
@@ -117,7 +118,7 @@ int stk_init(void)
 		load_result = stk_module_load_init(tmp_path, successful_loads);
 
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(stderr, "[stk] Failed to load module %s: %s",
+			stk_log(stderr, "Failed to load module %s: %s",
 				files[i], stk_error_string(load_result));
 		} else {
 			successful_loads++;
@@ -133,14 +134,13 @@ int stk_init(void)
 scanned:
 	watch_handle = platform_directory_watch_start(stk_mod_dir);
 	if (!watch_handle) {
-		stk_log(stderr,
-			"[stk] FATAL: Cannot start directory watch on %s",
+		stk_log(stderr, "FATAL: Cannot start directory watch on %s",
 			stk_mod_dir);
 		stk_module_unload_all();
 		return STK_INIT_WATCH_ERROR;
 	}
 
-	stk_log(stdout, "[stk] stk v%s initialized! Loaded %lu mod%s from %s/",
+	stk_log(stdout, "stk v%s initialized! Loaded %lu mod%s from %s/",
 		STK_VERSION_STRING, module_count, module_count != 1 ? "s" : "",
 		stk_mod_dir);
 
@@ -159,13 +159,12 @@ void stk_shutdown(void)
 
 	if (platform_remove_dir(stk_tmp_dir) !=
 	    STK_PLATFORM_OPERATION_SUCCESS) {
-		stk_log(stderr,
-			"[stk] Warning: failed to remove temp directory %s",
+		stk_log(stderr, "Warning: failed to remove temp directory %s",
 			stk_tmp_dir);
 	}
 
 	stk_initialized = 0;
-	stk_log(stdout, "[stk] stk shutdown");
+	stk_log(stdout, "stk shutdown");
 }
 
 size_t stk_poll(void)
@@ -235,8 +234,9 @@ size_t stk_poll(void)
 handle_grow:
 	remaining_loads = load_count - unload_count;
 	new_capacity = module_count + remaining_loads;
-	if (stk_module_realloc_memory(new_capacity) != 0)
+	if (stk_module_realloc_memory(new_capacity) != STK_MOD_INIT_SUCCESS) {
 		goto free_poll;
+	}
 
 begin_operations:
 	for (i = 0; i < unload_count; ++i)
@@ -256,14 +256,14 @@ begin_operations:
 
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(stderr, "[stk] Failed to copy %s for reload",
+			stk_log(stderr, "Failed to copy %s for reload",
 				file_list[file_index]);
 			continue;
 		}
 
 		load_result = stk_module_load(tmp_path, mod_index);
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(stderr, "[stk] Failed to reload module %s: %s",
+			stk_log(stderr, "Failed to reload module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
 		}
@@ -281,14 +281,14 @@ begin_operations:
 
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(stderr, "[stk] Failed to copy %s for loading",
+			stk_log(stderr, "Failed to copy %s for loading",
 				file_list[file_index]);
 			continue;
 		}
 
 		load_result = stk_module_load(tmp_path, target_index);
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(stderr, "[stk] Failed to load module %s: %s",
+			stk_log(stderr, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
 		}
@@ -313,7 +313,7 @@ append_modules:
 
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(stderr, "[stk] Failed to copy %s for loading",
+			stk_log(stderr, "Failed to copy %s for loading",
 				file_list[file_index]);
 			continue;
 		}
@@ -321,7 +321,7 @@ append_modules:
 		load_result = stk_module_load(tmp_path, module_count +
 							    successful_appends);
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(stderr, "[stk] Failed to load module %s: %s",
+			stk_log(stderr, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
 		} else {
@@ -381,7 +381,8 @@ void stk_set_mod_dir(const char *path)
 	strncpy(stk_tmp_dir, stk_mod_dir, STK_PATH_MAX_OS - 1);
 	stk_tmp_dir[STK_PATH_MAX_OS - 1] = '\0';
 
-	strncat(stk_tmp_dir, "/", STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
+	strncat(stk_tmp_dir, STK_PATH_SEP_STR,
+		STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
 
 	strncat(stk_tmp_dir, stk_tmp_name,
 		STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
