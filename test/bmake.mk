@@ -17,10 +17,10 @@ MODULE_EXT = .so
 all: test
 
 test_program: test.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ test.c $(LDFLAGS)
 
 test_mod$(MODULE_EXT): test_mod.c
-	$(CC) $(CFLAGS) -fPIC -shared -o $@ $<
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ test_mod.c
 
 setup:
 	@mkdir -p mods

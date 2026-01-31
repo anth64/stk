@@ -50,4 +50,4 @@ clean:
 
 test: debug
 	@echo "=== Building and running stk tests ==="
-	cd test && ${MAKE} -f bmake.mk
+	cd ${.CURDIR}/test && ${MAKE} -f bmake.mk
