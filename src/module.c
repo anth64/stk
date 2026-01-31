@@ -1,15 +1,10 @@
+#include "platform.h"
 #include "stk.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define STK_MOD_FUNC_NAME_BUFFER 64
-
-#ifdef _WIN32
-#define STK_PATH_SEP '\\'
-#else
-#define STK_PATH_SEP '/'
-#endif
 
 typedef int (*stk_init_mod_func)(void);
 typedef void (*stk_shutdown_mod_func)(void);

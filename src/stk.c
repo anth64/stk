@@ -1,4 +1,5 @@
 #include "stk.h"
+#include "platform.h"
 #include "stk_log.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -49,7 +50,7 @@ static void build_path(char *dest, size_t dest_size, const char *dir,
 {
 	dest[0] = '\0';
 	strncat(dest, dir, dest_size - 1);
-	strncat(dest, "/", dest_size - strlen(dest) - 1);
+	strncat(dest, STK_PATH_SEP_STR, dest_size - strlen(dest) - 1);
 	strncat(dest, file, dest_size - strlen(dest) - 1);
 }
 
