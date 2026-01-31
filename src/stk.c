@@ -70,7 +70,7 @@ static const char *stk_error_string(int error_code)
 	}
 }
 
-int stk_init(void)
+uint8_t stk_init(void)
 {
 	char (*files)[STK_PATH_MAX] = NULL;
 	size_t file_count, i, successful_loads = 0;
