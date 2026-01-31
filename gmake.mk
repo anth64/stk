@@ -15,6 +15,7 @@ else
     RMDIR = rm -rf $(1)
 endif
 
+RELEASE_LDFLAGS := -s
 CFLAGS_BASE := -Wall -Wpedantic -I$(INC_DIR) -std=c89 $(CFLAGS_PLAT) 
 
 .PHONY: all debug release clean 
@@ -36,7 +37,7 @@ obj/debug/%.o: src/%.c
 # Release Rules
 $(BIN_DIR)/release/$(FULL_LIB): $(SRCS:src/%.c=obj/release/%.o) 
 	@$(call MKDIR,$(@D))
-	$(CC) -shared -o $@ $^ $(LDFLAGS_PLAT) 
+	$(CC) -shared $(RELEASE_LDFLAGS) -o $@ $^ $(LDFLAGS_PLAT) 
 
 obj/release/%.o: src/%.c 
 	@$(call MKDIR,$(@D))
