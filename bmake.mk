@@ -27,8 +27,9 @@ ${BIN_DIR}/debug/${FULL_LIB}: ${OBJS_DEBUG}
 	${CC} -shared -o ${.TARGET} ${.ALLSRC} ${LDFLAGS_PLAT}
 
 ${BIN_DIR}/release/${FULL_LIB}: ${OBJS_RELEASE}
-	@mkdir -p ${.TARGET:H}
-	${CC} -shared -s -o ${.TARGET} ${.ALLSRC} ${LDFLAGS_PLAT}
+	@mkdir -p ${.CURDIR}/${BIN_DIR}/release
+	${CC} -shared -s -o ${.CURDIR}/${BIN_DIR}/release/${FULL_LIB} ${.ALLSRC} ${LDFLAGS_PLAT}
+
 
 .for _src in ${SRCS}
 _obj_base = ${_src:S/^src\///:S/.c$/.o/}
