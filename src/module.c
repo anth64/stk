@@ -83,6 +83,7 @@ uint8_t stk_module_load(const char *path, int index)
 		stk_init_mod_func init_func;
 		stk_shutdown_mod_func shutdown_func;
 	} u;
+	size_t len;
 
 	handle = platform_load_library(path);
 	if (!handle)
@@ -106,8 +107,12 @@ uint8_t stk_module_load(const char *path, int index)
 		return STK_MOD_INIT_FAILURE;
 	}
 
-	strncpy(stk_module_ids[index], module_id, STK_MOD_ID_BUFFER - 1);
-	stk_module_ids[index][STK_MOD_ID_BUFFER - 1] = '\0';
+	len = strlen(module_id);
+	if (len >= STK_MOD_ID_BUFFER)
+		len = STK_MOD_ID_BUFFER - 1;
+
+	memcpy(stk_module_ids[index], module_id, len);
+	stk_module_ids[index][len] = '\0';
 
 	stk_handles[index] = handle;
 	stk_inits[index] = init_func;
@@ -167,45 +172,68 @@ uint8_t stk_module_init_memory(size_t capacity)
 
 uint8_t stk_module_realloc_memory(size_t new_capacity)
 {
-	char (*new_module_ids)[STK_MOD_ID_BUFFER];
-	void **new_handles;
-	stk_init_mod_func *new_inits;
-	stk_shutdown_mod_func *new_shutdowns;
-
-	char (*old_module_ids)[STK_MOD_ID_BUFFER] = stk_module_ids;
-	void **old_handles = stk_handles;
-	stk_init_mod_func *old_inits = stk_inits;
-	stk_shutdown_mod_func *old_shutdowns = stk_shutdowns;
+	char (*new_module_ids)[STK_MOD_ID_BUFFER] = NULL;
+	void **new_handles = NULL;
+	stk_init_mod_func *new_inits = NULL;
+	stk_shutdown_mod_func *new_shutdowns = NULL;
+	size_t i, copy_count;
 
 	if (new_capacity == 0) {
 		stk_module_free_memory();
 		return 0;
 	}
 
-	new_module_ids =
-	    realloc(stk_module_ids, new_capacity * sizeof(*stk_module_ids));
-	new_handles = realloc(stk_handles, new_capacity * sizeof(*new_handles));
-	new_inits = realloc(stk_inits, new_capacity * sizeof(*new_inits));
-	new_shutdowns =
-	    realloc(stk_shutdowns, new_capacity * sizeof(*new_shutdowns));
+	new_module_ids = malloc(new_capacity * sizeof(*stk_module_ids));
+	new_handles = malloc(new_capacity * sizeof(*new_handles));
+	new_inits = malloc(new_capacity * sizeof(stk_init_mod_func));
+	new_shutdowns = malloc(new_capacity * sizeof(stk_shutdown_mod_func));
 
 	if (!new_module_ids || !new_handles || !new_inits || !new_shutdowns) {
-		if (new_module_ids && new_module_ids != old_module_ids)
+		if (new_module_ids)
 			free(new_module_ids);
-		if (new_handles && new_handles != old_handles)
-			free(new_handles);
-		if (new_inits && new_inits != old_inits)
-			free(new_inits);
-		if (new_shutdowns && new_shutdowns != old_shutdowns)
-			free(new_shutdowns);
 
-		stk_module_ids = old_module_ids;
-		stk_handles = old_handles;
-		stk_inits = old_inits;
-		stk_shutdowns = old_shutdowns;
+		if (new_handles)
+			free(new_handles);
+
+		if (new_inits)
+			free(new_inits);
+
+		if (new_shutdowns)
+			free(new_shutdowns);
 
 		return STK_MOD_REALLOC_FAILURE;
 	}
+
+	copy_count =
+	    (module_count < new_capacity) ? module_count : new_capacity;
+
+	if (stk_module_ids) {
+		for (i = 0; i < copy_count; i++) {
+			strncpy(new_module_ids[i], stk_module_ids[i],
+				STK_MOD_ID_BUFFER - 1);
+			new_module_ids[i][STK_MOD_ID_BUFFER - 1] = '\0';
+		}
+	}
+
+	if (stk_handles)
+		memcpy(new_handles, stk_handles, copy_count * sizeof(void *));
+
+	if (stk_inits)
+		memcpy(new_inits, stk_inits,
+		       copy_count * sizeof(stk_init_mod_func));
+
+	if (stk_shutdowns)
+		memcpy(new_shutdowns, stk_shutdowns,
+		       copy_count * sizeof(stk_shutdown_mod_func));
+
+	for (i = copy_count; i < new_capacity; i++) {
+		new_module_ids[i][0] = '\0';
+		new_handles[i] = NULL;
+		new_inits[i] = NULL;
+		new_shutdowns[i] = NULL;
+	}
+
+	stk_module_free_memory();
 
 	stk_module_ids = new_module_ids;
 	stk_handles = new_handles;

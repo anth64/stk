@@ -340,6 +340,7 @@ char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
 	    struct dirent *e;
 	    struct stat st;
 	    char f[STK_PATH_MAX_OS];
+	    size_t name_len;
 
 	    d = opendir(dir_path);
 	    if (!d)
@@ -381,7 +382,12 @@ char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
 	    if (stat(f, &st) != 0 || !S_ISREG(st.st_mode))
 		    goto fill_loop;
 
-	    strncpy(list[i++], e->d_name, STK_PATH_MAX - 1);
+	    name_len = strlen(e->d_name);
+	    if (name_len >= STK_PATH_MAX) {
+		    name_len = STK_PATH_MAX - 1;
+	    }
+	    memcpy(list[i++], e->d_name, name_len);
+	    list[i - 1][name_len] = '\0';
 	    goto fill_loop;
 
     create_and_exit:
