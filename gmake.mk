@@ -18,7 +18,7 @@ endif
 RELEASE_LDFLAGS := -s
 CFLAGS_BASE := -Wall -Wpedantic -I$(INC_DIR) -std=c89 $(CFLAGS_PLAT) 
 
-.PHONY: all debug release clean 
+.PHONY: all debug release clean test
 
 all: debug 
 
@@ -49,3 +49,7 @@ obj/release/%.o: src/%.c
 clean: 
 	@$(call RMDIR,$(OBJ_DIR))
 	@$(call RMDIR,$(BIN_DIR))
+
+test: debug
+	@echo "=== Building and running stk tests ==="
+	@$(MAKE) -C test -f gmake.mk

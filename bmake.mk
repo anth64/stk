@@ -12,7 +12,7 @@ LDFLAGS_PLAT = -ldl
 CFLAGS_PLAT  = -fPIC
 CFLAGS_BASE  = -Wall -Wpedantic -I${.CURDIR}/${INC_DIR} -std=c89 ${CFLAGS_PLAT}
 
-.PHONY: all debug release clean
+.PHONY: all debug release clean test
 
 all: debug
 
@@ -47,3 +47,7 @@ obj/release/${_obj_base}: ${_src}
 
 clean:
 	rm -rf ${.CURDIR}/${OBJ_DIR} ${.CURDIR}/${BIN_DIR}
+
+test: debug
+	@echo "=== Building and running stk tests ==="
+	cd test && ${MAKE} -f bmake.mk

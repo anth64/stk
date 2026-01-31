@@ -58,3 +58,9 @@ dkms.conf
 obj/
 bin/
 
+# Test directories
+test/mods/
+test/test_program*
+test/test_mod.so
+test/test_mod.dylib
+test/test_mod.dll
