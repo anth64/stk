@@ -288,7 +288,7 @@ void *platform_get_symbol(void *h, const char *s)
 
 char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
     [STK_PATH_MAX] {
-	    size_t count = 0, i = 0;
+	    size_t count = 0, i = 0, name_len;
 	    char (*list)[STK_PATH_MAX] = NULL;
 #ifdef _WIN32
 	    WIN32_FIND_DATAA fd;
@@ -323,8 +323,14 @@ char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
 	    do {
 		    if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
 			    continue;
-		    if (is_valid_module_file(fd.cFileName) && i < count)
-			    strncpy(list[i++], fd.cFileName, STK_PATH_MAX - 1);
+		    if (is_valid_module_file(fd.cFileName) && i < count) {
+			    name_len = strlen(fd.cFileName);
+			    if (name_len >= STK_PATH_MAX)
+				    len = STK_PATH_MAX - 1;
+
+			    memcpy(list[i], fd.cFileName, name_len);
+			    list[i++][len] = '\0';
+		    }
 	    } while (FindNextFileA(h, &fd));
 
 	    FindClose(h);
@@ -340,7 +346,6 @@ char (*platform_directory_init_scan(const char *dir_path, size_t *out_count))
 	    struct dirent *e;
 	    struct stat st;
 	    char f[STK_PATH_MAX_OS];
-	    size_t name_len;
 
 	    d = opendir(dir_path);
 	    if (!d)
@@ -484,6 +489,7 @@ void *platform_directory_watch_start(const char *path)
 	    fd, path, IN_CLOSE_WRITE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM);
 	return (void *)(long)fd;
 #else
+	size_t name_len;
 #ifdef _WIN32
 	WIN32_FIND_DATAA fd;
 	HANDLE h;
@@ -538,10 +544,11 @@ void *platform_directory_watch_start(const char *path)
 	do {
 		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
 		    is_valid_module_file(fd.cFileName) && i < count) {
-			strncpy(ctx->snaps[i].filename, fd.cFileName,
-				STK_PATH_MAX - 1);
-			ctx->snaps[i].mtime = fd.ftLastWriteTime;
-			i++;
+			name_len = strlen(fd.cFileName);
+			if (len >= STK_PATH_MAX)
+				len = STK_PATH_MAX - 1;
+			memcpy(ctx->snaps[i].filename, fd.cFileName, len);
+			ctx->snaps[i++].mtime = fd.ftLastWriteTime;
 		}
 	} while (FindNextFileA(h, &fd));
 
@@ -759,14 +766,14 @@ stk_module_event_t *platform_directory_watch_check(
 #else
 	platform_watch_context_t *ctx = (platform_watch_context_t *)handle;
 	platform_snapshot_t *new_snaps = NULL;
-	size_t new_count = 0, i, j, ev_index = 0;
+	size_t new_count = 0, i, j, ev_index = 0, name_len;
 	stk_module_event_t *evs = NULL;
 	int found;
 #ifdef _WIN32
 	WIN32_FIND_DATAA fd;
 	HANDLE h;
 	char s[STK_PATH_MAX_OS];
-	size_t count = 0;
+	size_t count = 0, name_len;
 
 	sprintf(s, "%s\\*", ctx->path);
 	h = FindFirstFileA(s, &fd);
@@ -797,8 +804,13 @@ stk_module_event_t *platform_directory_watch_check(
 	do {
 		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
 		    is_valid_module_file(fd.cFileName) && new_count < count) {
-			strncpy(new_snaps[new_count].filename, fd.cFileName,
-				STK_PATH_MAX - 1);
+			name_len = strlen(fd.cFileName);
+			if (len >= STK_PATH_MAX)
+				len = STK_PATH_MAX - 1;
+
+			memcpy(new_snaps[new_count].filename, fd.cFileName,
+			       len);
+			new_snaps[new_count].filename[len] = '\0';
 			new_snaps[new_count].mtime = fd.ftLastWriteTime;
 			new_count++;
 		}
@@ -905,9 +917,13 @@ build_diff:
 			if (ctx->snaps[i].mtime != new_snaps[j].mtime) {
 				if (is_file_ready(ctx->path,
 						  new_snaps[j].filename)) {
-					strncpy((*file_list)[ev_index],
-						new_snaps[j].filename,
-						STK_PATH_MAX - 1);
+					name_len =
+					    strlen(ctx->snaps[i].filename);
+					if (name_len >= STK_PATH_MAX)
+						len = STK_PATH_MAX;
+					memcpy((*file_list)[ev_index],
+					       ctx->snaps[i].filename,
+					       name_len);
 					evs[ev_index++] = STK_MOD_RELOAD;
 				} else {
 					new_snaps[j].mtime =
