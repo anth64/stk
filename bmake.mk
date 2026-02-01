@@ -1,5 +1,9 @@
 .include "config.mk"
 
+PREFIX      ?= /usr/local
+LIBDIR      ?= ${PREFIX}/lib
+INCDIR      ?= ${PREFIX}/include
+
 UNAME_S != uname -s
 
 .if ${UNAME_S} == "Darwin"
@@ -12,7 +16,7 @@ LDFLAGS_PLAT = -ldl
 CFLAGS_PLAT  = -fPIC
 CFLAGS_BASE  = -Wall -Wpedantic -I${.CURDIR}/${INC_DIR} -std=c89 ${CFLAGS_PLAT}
 
-.PHONY: all debug release clean test
+.PHONY: all debug release clean test install uninstall
 
 all: debug
 
@@ -52,3 +56,12 @@ clean:
 test: debug
 	@echo "=== Building and running stk tests ==="
 	cd ${.CURDIR}/test && ${MAKE} -f bmake.mk
+
+install: release
+	install -d ${LIBDIR} ${INCDIR}
+	install -m 755 ${.CURDIR}/${BIN_DIR}/release/${FULL_LIB} ${LIBDIR}/
+	install -m 644 ${.CURDIR}/${INC_DIR}/stk.h ${INCDIR}/
+
+uninstall:
+	rm -f ${LIBDIR}/${FULL_LIB}
+	rm -f ${INCDIR}/stk.h

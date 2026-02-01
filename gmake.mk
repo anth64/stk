@@ -18,7 +18,11 @@ endif
 RELEASE_LDFLAGS := -s
 CFLAGS_BASE := -Wall -Wpedantic -I$(INC_DIR) -std=c89 $(CFLAGS_PLAT) 
 
-.PHONY: all debug release clean test
+PREFIX ?= /usr/local
+LIBDIR ?= $(PREFIX)/lib
+INCDIR ?= $(PREFIX)/include
+
+.PHONY: all debug release clean test install uninstall
 
 all: debug 
 
@@ -53,3 +57,22 @@ clean:
 test: debug
 	@echo "=== Building and running stk tests ==="
 	@$(MAKE) -C test -f gmake.mk
+
+# Installation (Unix only)
+ifneq ($(OS),Windows_NT)
+install: release
+	install -d $(LIBDIR) $(INCDIR)
+	install -m 755 $(BIN_DIR)/release/$(FULL_LIB) $(LIBDIR)/
+	install -m 644 $(INC_DIR)/stk.h $(INCDIR)/
+
+uninstall:
+	rm -f $(LIBDIR)/$(FULL_LIB)
+	rm -f $(INCDIR)/stk.h
+else
+install:
+	@echo "make install is not supported on Windows."
+	@echo "Copy include/stk.h and bin/release/stk.dll to your project."
+
+uninstall:
+	@echo "make uninstall is not supported on Windows."
+endif
