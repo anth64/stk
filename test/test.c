@@ -55,12 +55,12 @@ int main(int argc, char **argv)
 	while (!stop) {
 		size_t events = stk_poll();
 		if (events > 0)
-			printf("Poll: %lu module event(s) detected\n", events);
+			printf("Poll: %lu module event(s) detected\n", (unsigned long) events);
 
 		iterations++;
 		if (iterations % 5 == 0) {
 			printf("Still running... (iteration %lu)\n",
-			       iterations);
+			       (unsigned long) iterations);
 		}
 #ifdef _WIN32
 		Sleep(1000);
