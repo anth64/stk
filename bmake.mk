@@ -58,10 +58,12 @@ test: debug
 	cd ${.CURDIR}/test && ${MAKE} -f bmake.mk
 
 install: release
-	install -d ${LIBDIR} ${INCDIR}
+	install -d ${LIBDIR} ${INCDIR}/stk
 	install -m 755 ${.CURDIR}/${BIN_DIR}/release/${FULL_LIB} ${LIBDIR}/
-	install -m 644 ${.CURDIR}/${INC_DIR}/stk.h ${INCDIR}/
+	install -m 644 ${.CURDIR}/${INC_DIR}/stk.h ${INCDIR}/stk/
+	install -m 644 ${.CURDIR}/${INC_DIR}/stk_version.h ${INCDIR}/stk/
+	install -m 644 ${.CURDIR}/${INC_DIR}/stk_log.h ${INCDIR}/stk/
 
 uninstall:
 	rm -f ${LIBDIR}/${FULL_LIB}
-	rm -f ${INCDIR}/stk.h
+	rm -rf ${INCDIR}/stk

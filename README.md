@@ -1,5 +1,7 @@
 # stk (Stalwart Toolkit)
 
+[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
+
 `stk` is a lightweight, modular toolkit for building games and game engines. It provides a **portable foundation** for dynamically loading modules, native or WASM, without enforcing any architecture or design choices.
 
 It is designed to run on modern systems running POSIX and Windows using C89.
@@ -53,7 +55,7 @@ sudo ./build.sh PREFIX=$HOME/.local install
 ```
 build.bat release
 ```
-* Once finished building, copy `include/stk.h` and `bin/release/stk.dll` to your project directory.
+* Once finished building, copy the headers from `include/` to `your_project/include/stk/` and `bin/release/stk.dll` to your project's lib directory.
 
 ---
 
@@ -62,7 +64,7 @@ build.bat release
 ### Basic Example
 
 ```c
-#include <stk.h>
+#include <stk/stk.h>
 #include <stdio.h>
 
 int main(void)
@@ -197,7 +199,7 @@ Run the included test suite:
 build.bat test     # Windows
 ```
 
-The test will watch the `modules/` directory and report when modules are loaded, reloaded, or unloaded.
+The test will watch the `mods/` directory and report when modules are loaded, reloaded, or unloaded.
 
 ---
 

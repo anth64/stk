@@ -61,17 +61,20 @@ test: debug
 # Installation (Unix only)
 ifneq ($(OS),Windows_NT)
 install: release
-	install -d $(LIBDIR) $(INCDIR)
+	install -d $(LIBDIR) $(INCDIR)/stk
 	install -m 755 $(BIN_DIR)/release/$(FULL_LIB) $(LIBDIR)/
-	install -m 644 $(INC_DIR)/stk.h $(INCDIR)/
+	install -m 644 $(INC_DIR)/stk.h $(INCDIR)/stk/
+	install -m 644 $(INC_DIR)/stk_version.h $(INCDIR)/stk/
+	install -m 644 $(INC_DIR)/stk_log.h $(INCDIR)/stk/
 
 uninstall:
 	rm -f $(LIBDIR)/$(FULL_LIB)
-	rm -f $(INCDIR)/stk.h
+	rm -rf $(INCDIR)/stk
 else
 install:
 	@echo "make install is not supported on Windows."
-	@echo "Copy include/stk.h and bin/release/stk.dll to your project."
+	@echo "Copy include/ directory contents to your_project/include/stk/"
+	@echo "Copy bin/release/stk.dll to your project's lib directory."
 
 uninstall:
 	@echo "make uninstall is not supported on Windows."
