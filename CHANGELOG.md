@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-02-10
+
+### Fixed
+- **Compilation**: Fixed GCC `-Wrestrict` warning in Linux directory watching code by replacing `strncpy` with `memmove` for overlapping memory operations
+  - Ensures clean compilation without warnings while maintaining identical runtime behavior
+  - Uses semantically correct function for moving memory within the same buffer
+
 ## [0.0.2] - 2026-02-09
 
 ### Fixed
@@ -37,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/anth64/stk/releases/tag/v0.0.3
 [0.0.2]: https://github.com/anth64/stk/releases/tag/v0.0.2
 [0.0.1]: https://github.com/anth64/stk/releases/tag/v0.0.1
