@@ -662,7 +662,7 @@ stk_module_event_t *platform_directory_watch_check(
 	int fd = (int)(long)handle;
 	char buf[STK_EVENT_BUFFER];
 	ssize_t len;
-	size_t index = 0, count = 0, i, write_idx;
+	size_t index = 0, count = 0, i, write_index;
 	stk_module_event_t *evs;
 	char *ptr, *end;
 	struct inotify_event *e;
@@ -760,20 +760,18 @@ stk_module_event_t *platform_directory_watch_check(
 		}
 	}
 
-	write_idx = 0;
+	write_index = 0;
 	for (i = 0; i < index; ++i) {
 		if (evs[i] != -1) {
-			if (write_idx != i) {
-				evs[write_idx] = evs[i];
-				strncpy((*file_list)[write_idx],
-					(*file_list)[i], STK_PATH_MAX - 1);
-				(*file_list)[write_idx][STK_PATH_MAX - 1] =
-				    '\0';
+			if (write_index != i) {
+				evs[write_index] = evs[i];
+				memmove((*file_list)[write_index],
+					(*file_list)[i], STK_PATH_MAX);
 			}
-			write_idx++;
+			write_index++;
 		}
 	}
-	index = write_idx;
+	index = write_index;
 
 	*out_count = index;
 	return evs;
