@@ -242,9 +242,6 @@ begin_operations:
 	for (i = 0; i < unload_count; ++i)
 		stk_module_unload(unloaded_mod_indices[i]);
 
-	for (i = 0; i < reload_count; ++i)
-		stk_module_unload(reloaded_mod_indices[i]);
-
 	for (i = 0; i < reload_count; ++i) {
 		int file_index = reloaded_mod_file_indices[i];
 		int mod_index = reloaded_mod_indices[i];
@@ -260,6 +257,8 @@ begin_operations:
 				file_list[file_index]);
 			continue;
 		}
+
+		stk_module_unload(mod_index);
 
 		load_result = stk_module_load(tmp_path, mod_index);
 		if (load_result != STK_MOD_INIT_SUCCESS) {
