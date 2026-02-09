@@ -173,14 +173,15 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 0.0.1 (Pre-release)
+**Current Version:** 0.0.2 (Pre-release)
 
-This is an early release proving the core hot-reload foundation. Phase 1 is still in progress.
+This is an early bugfix release improving hot-reload stability on Linux. Phase 1 is still in progress.
 
 ### What Works
 - Cross-platform module loading and hot-reloading
 - File watching (inotify/kqueue/FindFirstFile)
 - Basic error handling
+- Stable hot-reload even during rapid file changes (Linux fix in 0.0.2)
 
 ### In Progress (Phase 1)
 - Complete logging system (log levels, verbosity, output configuration)

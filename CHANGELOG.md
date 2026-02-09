@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-02-09
+
+### Fixed
+- **Linux**: Fixed segfaults during rapid module reloads when file changes are detected in quick succession
+  - Enabled file readiness checks on Linux (previously only used on Windows/BSD) to prevent loading partially-written shared libraries
+  - Fixed inotify event deduplication to actually remove duplicate events instead of just marking them
+  - Reordered reload operations to only unload old module after successfully copying new version, preventing invalid state when copy fails
+- **All platforms**: Improved reload safety by deferring module unload until after successful file copy
+
+### Changed
+- Made `is_file_ready()` check available on all Unix platforms (was previously excluded on Linux)
+
 ## [0.0.1] - 2026-02-01
 
 ### Added
@@ -25,5 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/anth64/stk/releases/tag/v0.0.2
 [0.0.1]: https://github.com/anth64/stk/releases/tag/v0.0.1
