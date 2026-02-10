@@ -173,15 +173,15 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 0.0.3 (Pre-release)
+**Current Version:** 0.0.4 (Pre-release)
 
-This is an early bugfix release improving compilation warnings on Linux. Phase 1 is still in progress.
+This is a bugfix release completing the Linux hot-reload stability improvements. Phase 1 is still in progress.
 
 ### What Works
 - Cross-platform module loading and hot-reloading
 - File watching (inotify/kqueue/FindFirstFile)
 - Basic error handling
-- Stable hot-reload even during rapid file changes
+- Robust hot-reload even during extremely rapid file changes (Linux fixes in 0.0.2-0.0.4)
 
 ### In Progress (Phase 1)
 - Complete logging system (log levels, verbosity, output configuration)

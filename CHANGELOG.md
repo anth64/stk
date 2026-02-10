@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-02-11
+
+### Fixed
+- **Linux**: Fixed segfault from invalid module indices during extremely rapid file changes
+  - Added validation check to skip stale UNLOAD/RELOAD events for already-unloaded modules
+  - Prevents is_mod_loaded() returning -1 from being used as array index (SIZE_MAX)
+  - Fixed event count mismatch where loops would run more iterations than valid indices populated
+  - Completes the Linux hot-reload stability fixes from v0.0.2
+
 ## [0.0.3] - 2026-02-10
 
 ### Fixed
