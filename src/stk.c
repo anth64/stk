@@ -172,8 +172,7 @@ size_t stk_poll(void)
 	char (*file_list)[STK_PATH_MAX] = NULL;
 	stk_module_event_t *events = NULL;
 	size_t i, file_count = 0, reload_count = 0, load_count = 0,
-		  unload_count = 0, reload_index = 0, load_index = 0,
-		  unload_index = 0;
+		  unload_count = 0;
 	int *reloaded_mod_indices = NULL, *reloaded_mod_file_indices = NULL,
 	    *unloaded_mod_indices = NULL, *loaded_mod_indices = NULL;
 	size_t remaining_loads, new_capacity, holes_to_fill;
@@ -208,20 +207,31 @@ size_t stk_poll(void)
 	unloaded_mod_indices = malloc(unload_count * sizeof(int));
 	loaded_mod_indices = malloc(load_count * sizeof(int));
 
+	reload_count = 0;
+	unload_count = 0;
+	load_count = 0;
+
 	for (i = 0; i < file_count; ++i) {
+		int mod_index;
 		extract_module_id(file_list[i], mod_id);
 		switch (events[i]) {
 		case STK_MOD_LOAD:
-			loaded_mod_indices[load_index++] = i;
+			loaded_mod_indices[load_count++] = i;
 			break;
 		case STK_MOD_RELOAD:
-			reloaded_mod_file_indices[reload_index] = i;
-			reloaded_mod_indices[reload_index++] =
-			    is_mod_loaded(mod_id);
+			mod_index = is_mod_loaded(mod_id);
+			if (mod_index >= 0) {
+				reloaded_mod_file_indices[reload_count] = i;
+				reloaded_mod_indices[reload_count] = mod_index;
+				reload_count++;
+			}
 			break;
 		case STK_MOD_UNLOAD:
-			unloaded_mod_indices[unload_index++] =
-			    is_mod_loaded(mod_id);
+			mod_index = is_mod_loaded(mod_id);
+			if (mod_index >= 0) {
+				unloaded_mod_indices[unload_count] = mod_index;
+				unload_count++;
+			}
 			break;
 		}
 	}
