@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 /* Buffers */
+#define STK_LOG_PREFIX_BUFFER 64
 #define STK_MOD_DIR_BUFFER 256
 #define STK_MOD_ID_BUFFER 64
 #define STK_PATH_MAX 256

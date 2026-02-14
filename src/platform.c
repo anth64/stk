@@ -4,27 +4,24 @@
 #include <string.h>
 
 #ifndef _WIN32
+#include <dirent.h>
+#include <dlfcn.h>
 #include <sys/file.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
 #endif
 
 #if defined(__linux__)
-#include <dirent.h>
-#include <dlfcn.h>
 #include <sys/inotify.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #elif defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
-#include <dirent.h>
-#include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/event.h>
-#include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/types.h>
-#include <unistd.h>
 #endif
 
 int is_mod_loaded(const char *module_name);
@@ -1007,5 +1004,27 @@ no_change:
 #endif
 	*out_count = 0;
 	return NULL;
+#endif
+}
+
+void platform_get_timestamp(char *buffer, size_t size)
+{
+#ifdef _WIN32
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d.%03d", st.wYear,
+		st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
+		st.wMilliseconds);
+#else
+	struct timeval tv;
+	struct tm *tm_info;
+
+	gettimeofday(&tv, NULL);
+	tm_info = localtime(&tv.tv_sec);
+
+	sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d.%03d",
+		tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+		tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec,
+		(int)(tv.tv_usec / 1000));
 #endif
 }

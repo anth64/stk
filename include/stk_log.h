@@ -7,7 +7,18 @@
 extern "C" {
 #endif
 
-void stk_log(FILE *fp, const char *fmt, ...);
+typedef enum {
+	STK_LOG_ERROR,
+	STK_LOG_WARN,
+	STK_LOG_INFO,
+	STK_LOG_DEBUG
+} stk_log_level_t;
+
+void stk_set_log_output(FILE *fp);
+void stk_set_log_prefix(const char *prefix);
+void stk_set_log_level(stk_log_level_t min_level);
+
+void stk_log(stk_log_level_t level, const char *fmt, ...);
 
 #ifdef __cplusplus
 }

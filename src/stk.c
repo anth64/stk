@@ -86,7 +86,7 @@ unsigned char stk_init(void)
 		if (test_scan)
 			free(test_scan);
 		if (!test_scan && test_count == 0) {
-			stk_log(stderr,
+			stk_log(STK_LOG_ERROR,
 				"FATAL: Cannot create temp directory: %s",
 				stk_tmp_dir);
 			return STK_INIT_TMPDIR_ERROR;
@@ -96,7 +96,7 @@ unsigned char stk_init(void)
 	files = platform_directory_init_scan(stk_mod_dir, &file_count);
 
 	if (file_count > 0 && stk_module_init_memory(file_count) != 0) {
-		stk_log(stderr, "FATAL: Memory allocation failed");
+		stk_log(STK_LOG_ERROR, "FATAL: Memory allocation failed");
 		return STK_INIT_MEMORY_ERROR;
 	}
 
@@ -109,7 +109,8 @@ unsigned char stk_init(void)
 
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(stderr, "Failed to copy %s to temp directory",
+			stk_log(STK_LOG_ERROR,
+				"Failed to copy %s to temp directory",
 				files[i]);
 			continue;
 		}
@@ -117,7 +118,7 @@ unsigned char stk_init(void)
 		load_result = stk_module_load_init(tmp_path, successful_loads);
 
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(stderr, "Failed to load module %s: %s",
+			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				files[i], stk_error_string(load_result));
 		} else {
 			successful_loads++;
@@ -133,13 +134,14 @@ unsigned char stk_init(void)
 scanned:
 	watch_handle = platform_directory_watch_start(stk_mod_dir);
 	if (!watch_handle) {
-		stk_log(stderr, "FATAL: Cannot start directory watch on %s",
+		stk_log(STK_LOG_ERROR,
+			"FATAL: Cannot start directory watch on %s",
 			stk_mod_dir);
 		stk_module_unload_all();
 		return STK_INIT_WATCH_ERROR;
 	}
 
-	stk_log(stdout, "stk v%s initialized! Loaded %lu mod%s from %s/",
+	stk_log(STK_LOG_INFO, "stk v%s initialized! Loaded %lu mod%s from %s/",
 		STK_VERSION_STRING, module_count, module_count != 1 ? "s" : "",
 		stk_mod_dir);
 
@@ -158,12 +160,13 @@ void stk_shutdown(void)
 
 	if (platform_remove_dir(stk_tmp_dir) !=
 	    STK_PLATFORM_OPERATION_SUCCESS) {
-		stk_log(stderr, "Warning: failed to remove temp directory %s",
+		stk_log(STK_LOG_WARN,
+			"Warning: failed to remove temp directory %s",
 			stk_tmp_dir);
 	}
 
 	stk_flags &= ~STK_FLAG_INITIALIZED;
-	stk_log(stdout, "stk shutdown");
+	stk_log(STK_LOG_INFO, "stk shutdown");
 }
 
 size_t stk_poll(void)
@@ -262,7 +265,7 @@ begin_operations:
 
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(stderr, "Failed to copy %s for reload",
+			stk_log(STK_LOG_ERROR, "Failed to copy %s for reload",
 				file_list[file_index]);
 			continue;
 		}
@@ -271,7 +274,7 @@ begin_operations:
 
 		load_result = stk_module_load(tmp_path, mod_index);
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(stderr, "Failed to reload module %s: %s",
+			stk_log(STK_LOG_ERROR, "Failed to reload module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
 		}
@@ -289,14 +292,14 @@ begin_operations:
 
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(stderr, "Failed to copy %s for loading",
+			stk_log(STK_LOG_ERROR, "Failed to copy %s for loading",
 				file_list[file_index]);
 			continue;
 		}
 
 		load_result = stk_module_load(tmp_path, target_index);
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(stderr, "Failed to load module %s: %s",
+			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
 		}
@@ -321,7 +324,7 @@ append_modules:
 
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(stderr, "Failed to copy %s for loading",
+			stk_log(STK_LOG_ERROR, "Failed to copy %s for loading",
 				file_list[file_index]);
 			continue;
 		}
@@ -329,7 +332,7 @@ append_modules:
 		load_result = stk_module_load(tmp_path, module_count +
 							    successful_appends);
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(stderr, "Failed to load module %s: %s",
+			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
 		} else {
