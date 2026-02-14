@@ -2,7 +2,6 @@
 #define STK_H
 
 #include "stk_version.h"
-#include <stdint.h>
 #include <stdlib.h>
 
 /* Buffers */
@@ -55,7 +54,7 @@ typedef enum {
 	STK_MOD_RELOAD
 } stk_module_event_t;
 
-uint8_t stk_init(void);
+unsigned char stk_init(void);
 void stk_shutdown(void);
 size_t stk_module_count(void);
 size_t stk_poll(void);

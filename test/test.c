@@ -31,8 +31,8 @@ void inthand(int signum)
 
 int main(int argc, char **argv)
 {
-	uint8_t init_result;
-	uint64_t iterations = 0;
+	unsigned char init_result;
+	size_t iterations = 0;
 
 	printf("stk test - CTRL+C to exit\n");
 
@@ -55,12 +55,13 @@ int main(int argc, char **argv)
 	while (!stop) {
 		size_t events = stk_poll();
 		if (events > 0)
-			printf("Poll: %lu module event(s) detected\n", (unsigned long) events);
+			printf("Poll: %lu module event(s) detected\n",
+			       (unsigned long)events);
 
 		iterations++;
 		if (iterations % 5 == 0) {
 			printf("Still running... (iteration %lu)\n",
-			       (unsigned long) iterations);
+			       (unsigned long)iterations);
 		}
 #ifdef _WIN32
 		Sleep(1000);

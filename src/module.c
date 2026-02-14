@@ -1,6 +1,5 @@
 #include "platform.h"
 #include "stk.h"
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -18,7 +17,7 @@ void **stk_handles = NULL;
 stk_init_mod_func *stk_inits = NULL;
 stk_shutdown_mod_func *stk_shutdowns = NULL;
 
-extern uint8_t stk_initialized;
+extern unsigned char stk_initialized;
 
 static char stk_mod_init_name[STK_MOD_FUNC_NAME_BUFFER] = "stk_mod_init";
 static char stk_mod_shutdown_name[STK_MOD_FUNC_NAME_BUFFER] =
@@ -43,7 +42,7 @@ void extract_module_id(const char *path, char *out_id)
 		*dot = '\0';
 }
 
-uint8_t is_valid_module_file(const char *filename)
+unsigned char is_valid_module_file(const char *filename)
 {
 	const char *ext;
 	size_t name_len;
@@ -72,7 +71,7 @@ int is_mod_loaded(const char *module_name)
 	return -1;
 }
 
-uint8_t stk_module_load(const char *path, int index)
+unsigned char stk_module_load(const char *path, int index)
 {
 	void *handle;
 	stk_init_mod_func init_func;
@@ -121,7 +120,7 @@ uint8_t stk_module_load(const char *path, int index)
 	return STK_MOD_INIT_SUCCESS;
 }
 
-uint8_t stk_module_load_init(const char *path, int index)
+unsigned char stk_module_load_init(const char *path, int index)
 {
 	int result;
 	result = stk_module_load(path, index);
@@ -155,7 +154,7 @@ void stk_module_free_memory(void)
 	stk_shutdowns = NULL;
 }
 
-uint8_t stk_module_init_memory(size_t capacity)
+unsigned char stk_module_init_memory(size_t capacity)
 {
 	stk_module_ids = malloc(capacity * sizeof(*stk_module_ids));
 	stk_handles = malloc(capacity * sizeof(void *));
@@ -170,7 +169,7 @@ uint8_t stk_module_init_memory(size_t capacity)
 	return STK_INIT_SUCCESS;
 }
 
-uint8_t stk_module_realloc_memory(size_t new_capacity)
+unsigned char stk_module_realloc_memory(size_t new_capacity)
 {
 	char (*new_module_ids)[STK_MOD_ID_BUFFER] = NULL;
 	void **new_handles = NULL;

@@ -1,5 +1,4 @@
 #include "stk.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,10 +28,10 @@
 #endif
 
 int is_mod_loaded(const char *module_name);
-uint8_t is_valid_module_file(const char *filename);
+unsigned char is_valid_module_file(const char *filename);
 void extract_module_id(const char *path, char *out_id);
 
-static uint8_t is_file_ready(const char *dir_path, const char *filename)
+static unsigned char is_file_ready(const char *dir_path, const char *filename)
 {
 	char full_path[STK_PATH_MAX_OS];
 #ifdef _WIN32
@@ -108,7 +107,7 @@ typedef struct {
 } platform_watch_context_t;
 #endif
 
-uint8_t platform_mkdir(const char *path)
+unsigned char platform_mkdir(const char *path)
 {
 #ifdef _WIN32
 	return CreateDirectoryA(path, NULL) ? STK_PLATFORM_OPERATION_SUCCESS
@@ -130,7 +129,7 @@ int platform_remove_file(const char *path)
 #endif
 }
 
-uint8_t platform_copy_file(const char *from, const char *to)
+unsigned char platform_copy_file(const char *from, const char *to)
 {
 	char buf[STK_PATH_MAX_OS];
 	int ret = STK_PLATFORM_FILE_COPY_ERROR;
@@ -203,7 +202,7 @@ done:
 	return ret;
 }
 
-uint8_t platform_remove_dir(const char *path)
+unsigned char platform_remove_dir(const char *path)
 {
 #ifdef _WIN32
 	WIN32_FIND_DATAA fd;

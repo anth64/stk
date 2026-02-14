@@ -156,7 +156,7 @@ stk_init();
 ### API Reference
 
 #### Initialization
-- `uint8_t stk_init(void)` - Initialize stk, returns `STK_INIT_SUCCESS` on success
+- `unsigned char stk_init(void)` - Initialize stk, returns `STK_INIT_SUCCESS` on success
 - `void stk_shutdown(void)` - Shutdown and cleanup all modules
 
 #### Runtime
