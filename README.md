@@ -169,22 +169,31 @@ stk_init();
 - `void stk_set_module_init_fn(const char *name)` - Set module init function name
 - `void stk_set_module_shutdown_fn(const char *name)` - Set module shutdown function name
 
+#### Logging
+- `void stk_set_logging_enabled(unsigned char enabled)` - Enable/disable all logging
+- `unsigned char stk_is_logging_enabled(void)` - Query logging state
+- `void stk_set_log_output(FILE *fp)` - Set log output stream (default: stdout, NULL disables)
+- `void stk_set_log_prefix(const char *prefix)` - Set log prefix (default: "stk")
+- `void stk_set_log_level(stk_log_level_t level)` - Set minimum log level (default: INFO)
+
+**Log Levels:** `STK_LOG_ERROR`, `STK_LOG_WARN`, `STK_LOG_INFO`, `STK_LOG_DEBUG`
+
 ---
 
 ## Project Status
 
-**Current Version:** 0.0.4 (Pre-release)
+**Current Version:** 0.1.0 (Pre-release)
 
-This is a bugfix release completing the Linux hot-reload stability improvements. Phase 1 is still in progress.
+This release brings C89 compliance fixes and a complete logging system rewrite with levels, timestamps, and runtime configuration.
 
 ### What Works
 - Cross-platform module loading and hot-reloading
 - File watching (inotify/kqueue/FindFirstFile)
-- Basic error handling
-- Robust hot-reload even during extremely rapid file changes (Linux fixes in 0.0.2-0.0.4)
+- Robust hot-reload even during extremely rapid file changes
+- Enhanced logging with levels, timestamps, and filtering
+- Runtime-configurable logging behavior
 
 ### In Progress (Phase 1)
-- Complete logging system (log levels, verbosity, output configuration)
 - Module metadata (name, version, description)
 - Dependency management and versioning
 

@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-02-15
+
+### Fixed
+- **C89 Compliance**: Removed stdint.h dependency (C99 feature)
+  - Replaced all uint8_t with unsigned char throughout codebase
+  - Ensures strict C89 compliance for maximum portability
+
+### Added
+- **Flags system**: Centralized bitfield for boolean state and settings
+  - Replaces stk_initialized with stk_flags for efficient memory usage
+  - Single byte packs all boolean flags (STK_FLAG_INITIALIZED, STK_FLAG_LOGGING_ENABLED)
+  - Runtime-changeable logging control via stk_set_logging_enabled()
+
+- **Enhanced logging system**: Complete rewrite with modern features
+  - Log levels: ERROR, WARN, INFO, DEBUG with runtime filtering
+  - Timestamps: yyyy-mm-dd HH:MM:SS.mmm format (platform-specific implementation)
+  - Configurable log output stream (stk_set_log_output)
+  - Configurable log prefix (stk_set_log_prefix, defaults to "stk")
+  - Configurable minimum log level (stk_set_log_level, defaults to INFO)
+  - Platform abstraction for timestamps (GetLocalTime on Windows, gettimeofday on POSIX)
+
+### Changed
+- **BREAKING**: stk_log() signature changed from stk_log(FILE *fp, ...) to stk_log(stk_log_level_t level, ...)
+- **BREAKING**: All uint8_t types replaced with unsigned char
+- All internal STK messages now use appropriate log levels
+- Setting log output to NULL disabls logging
+
+### Notes
+- This release completes Phase 1 logging improvements
+- Dependency management still in progress for Phase 1 completion
+
 ## [0.0.4] - 2026-02-11
 
 ### Fixed
@@ -53,7 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/anth64/stk/releases/tag/v0.1.0
+[0.0.4]: https://github.com/anth64/stk/releases/tag/v0.0.4
 [0.0.3]: https://github.com/anth64/stk/releases/tag/v0.0.3
 [0.0.2]: https://github.com/anth64/stk/releases/tag/v0.0.2
 [0.0.1]: https://github.com/anth64/stk/releases/tag/v0.0.1
