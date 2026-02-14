@@ -182,7 +182,7 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 0.1.0 (Pre-release)
+**Current Version:** 0.1.1 (Pre-release)
 
 This release brings C89 compliance fixes and a complete logging system rewrite with levels, timestamps, and runtime configuration.
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-02-15
+
+### Fixed
+- **Logging**: Corrected log level severity order in enum
+  - Reversed order so DEBUG (0) < INFO (1) < WARN (2) < ERROR (3)
+  - Fixes filtering logic where ERROR/WARN were incorrectly blocked
+  - Default INFO level now properly shows INFO, WARN, and ERROR while filtering DEBUG
+
 ## [0.1.0] - 2026-02-15
 
 ### Fixed
@@ -84,7 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/anth64/stk/releases/tag/v0.1.1
 [0.1.0]: https://github.com/anth64/stk/releases/tag/v0.1.0
 [0.0.4]: https://github.com/anth64/stk/releases/tag/v0.0.4
 [0.0.3]: https://github.com/anth64/stk/releases/tag/v0.0.3
