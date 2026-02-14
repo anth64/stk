@@ -30,6 +30,10 @@
 #define STK_PLATFORM_REMOVE_DIR_ERROR 3
 #define STK_PLATFORM_REMOVE_FILE_ERROR 4
 
+/* Settings flags */
+#define STK_FLAG_INITIALIZED 0x01
+#define STK_FLAG_LOGGING_ENABLED 0x02
+
 #if defined(__linux__) || defined(_WIN32)
 #define STK_EVENT_BUFFER 4096
 #endif
@@ -62,6 +66,8 @@ void stk_set_mod_dir(const char *path);
 void stk_set_tmp_dir_name(const char *name);
 void stk_set_module_init_fn(const char *name);
 void stk_set_module_shutdown_fn(const char *name);
+void stk_set_logging_enabled(unsigned char enabled);
+unsigned char stk_is_logging_enabled(void);
 
 #ifdef __cplusplus
 }

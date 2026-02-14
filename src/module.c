@@ -17,7 +17,7 @@ void **stk_handles = NULL;
 stk_init_mod_func *stk_inits = NULL;
 stk_shutdown_mod_func *stk_shutdowns = NULL;
 
-extern unsigned char stk_initialized;
+extern unsigned char stk_flags;
 
 static char stk_mod_init_name[STK_MOD_FUNC_NAME_BUFFER] = "stk_mod_init";
 static char stk_mod_shutdown_name[STK_MOD_FUNC_NAME_BUFFER] =
@@ -253,7 +253,7 @@ void stk_module_unload_all(void)
 
 void stk_set_module_init_fn(const char *name)
 {
-	if (!name || stk_initialized)
+	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
 		return;
 
 	strncpy(stk_mod_init_name, name, STK_MOD_FUNC_NAME_BUFFER - 1);
@@ -262,7 +262,7 @@ void stk_set_module_init_fn(const char *name)
 
 void stk_set_module_shutdown_fn(const char *name)
 {
-	if (!name || stk_initialized)
+	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
 		return;
 
 	strncpy(stk_mod_shutdown_name, name, STK_MOD_FUNC_NAME_BUFFER - 1);

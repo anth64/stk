@@ -15,7 +15,7 @@ extern char (*stk_module_ids)[STK_MOD_ID_BUFFER];
 
 extern size_t module_count;
 
-unsigned char stk_initialized = 0;
+unsigned char stk_flags = STK_FLAG_LOGGING_ENABLED;
 
 static char stk_mod_dir[STK_PATH_MAX_OS] = "mods";
 static char stk_tmp_name[STK_MOD_ID_BUFFER] = ".tmp";
@@ -143,7 +143,7 @@ scanned:
 		STK_VERSION_STRING, module_count, module_count != 1 ? "s" : "",
 		stk_mod_dir);
 
-	stk_initialized = 1;
+	stk_flags |= STK_FLAG_INITIALIZED;
 	return STK_INIT_SUCCESS;
 }
 
@@ -162,7 +162,7 @@ void stk_shutdown(void)
 			stk_tmp_dir);
 	}
 
-	stk_initialized = 0;
+	stk_flags &= ~STK_FLAG_INITIALIZED;
 	stk_log(stdout, "stk shutdown");
 }
 
@@ -380,7 +380,7 @@ finish_poll:
 
 void stk_set_mod_dir(const char *path)
 {
-	if (!path || stk_initialized)
+	if (!path || (stk_flags & STK_FLAG_INITIALIZED))
 		return;
 
 	strncpy(stk_mod_dir, path, STK_PATH_MAX_OS - 1);
@@ -398,7 +398,7 @@ void stk_set_mod_dir(const char *path)
 
 void stk_set_tmp_dir_name(const char *name)
 {
-	if (!name || stk_initialized)
+	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
 		return;
 
 	strncpy(stk_tmp_name, name, STK_MOD_ID_BUFFER - 1);
@@ -410,4 +410,17 @@ void stk_set_tmp_dir_name(const char *name)
 	strncat(stk_tmp_dir, "/", STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
 	strncat(stk_tmp_dir, stk_tmp_name,
 		STK_PATH_MAX_OS - strlen(stk_tmp_dir) - 1);
+}
+
+void stk_set_logging_enabled(unsigned char enabled)
+{
+	if (enabled)
+		stk_flags |= STK_FLAG_LOGGING_ENABLED;
+	else
+		stk_flags &= ~STK_FLAG_LOGGING_ENABLED;
+}
+
+unsigned char stk_is_logging_enabled(void)
+{
+	return (stk_flags & STK_FLAG_LOGGING_ENABLED) != 0;
 }
