@@ -8,10 +8,10 @@ extern "C" {
 #endif
 
 typedef enum {
-	STK_LOG_ERROR,
-	STK_LOG_WARN,
+	STK_LOG_DEBUG,
 	STK_LOG_INFO,
-	STK_LOG_DEBUG
+	STK_LOG_WARN,
+	STK_LOG_ERROR
 } stk_log_level_t;
 
 void stk_set_log_output(FILE *fp);
