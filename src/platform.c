@@ -107,9 +107,29 @@ typedef struct {
 unsigned char platform_mkdir(const char *path)
 {
 #ifdef _WIN32
-	return CreateDirectoryA(path, NULL) ? STK_PLATFORM_OPERATION_SUCCESS
-					    : STK_PLATFORM_MKDIR_ERROR;
+	DWORD attrib;
+
+	attrib = GetFileAttributesA(path);
+
+	if (attrib != INVALID_FILE_ATTRIBUTES &&
+	    (attrib & FILE_ATTRIBUTE_DIRECTORY))
+		return STK_PLATFORM_OPERATION_SUCCESS;
+
+	if (!CreateDirectoryA(path, NULL))
+		return STK_PLATFORM_MKDIR_ERROR;
+
+	if (strrchr(path, '\\') && *(strrchr(path, '\\') + 1) == '.')
+		SetFileAttributesA(path, FILE_ATTRIBUTE_HIDDEN);
+	else if (!strrchr(path, '\\') && path[0] == '.')
+		SetFileAttributesA(path, FILE_ATTRIBUTE_HIDDEN);
+
+	return STK_PLATFORM_OPERATION_SUCCESS;
 #else
+	struct stat st;
+
+	if (stat(path, &st) == 0 && S_ISDIR(st.st_mode))
+		return STK_PLATFORM_OPERATION_SUCCESS;
+
 	return mkdir(path, 0755) == 0 ? STK_PLATFORM_OPERATION_SUCCESS
 				      : STK_PLATFORM_MKDIR_ERROR;
 #endif

@@ -19,7 +19,7 @@ unsigned char stk_flags = STK_FLAG_LOGGING_ENABLED;
 
 static char stk_mod_dir[STK_PATH_MAX_OS] = "mods";
 static char stk_tmp_name[STK_MOD_ID_BUFFER] = ".tmp";
-static char stk_tmp_dir[STK_PATH_MAX_OS] = "mods/.tmp";
+static char stk_tmp_dir[STK_PATH_MAX_OS] = "";
 static void *watch_handle = NULL;
 
 char (*platform_directory_init_scan(const char *path,
@@ -77,6 +77,8 @@ unsigned char stk_init(void)
 	char tmp_path[STK_PATH_MAX_OS];
 	int load_result;
 
+	platform_mkdir(stk_mod_dir);
+	build_path(stk_tmp_dir, sizeof(stk_tmp_dir), stk_mod_dir, stk_tmp_name);
 	if (platform_mkdir(stk_tmp_dir) != STK_PLATFORM_OPERATION_SUCCESS) {
 		char (*test_scan)[STK_PATH_MAX];
 		size_t test_count;
@@ -263,14 +265,14 @@ begin_operations:
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
 			   file_list[file_index]);
 
+		stk_module_unload(mod_index);
+
 		if (platform_copy_file(full_path, tmp_path) !=
 		    STK_PLATFORM_OPERATION_SUCCESS) {
 			stk_log(STK_LOG_ERROR, "Failed to copy %s for reload",
 				file_list[file_index]);
 			continue;
 		}
-
-		stk_module_unload(mod_index);
 
 		load_result = stk_module_load(tmp_path, mod_index);
 		if (load_result != STK_MOD_INIT_SUCCESS) {

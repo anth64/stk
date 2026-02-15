@@ -3,6 +3,8 @@ CFLAGS = -Wall -Wpedantic -I../include -std=c89
 LDFLAGS = -L../bin/debug -lstk
 
 ifeq ($(OS),Windows_NT)
+    SHELL := cmd.exe
+    .SHELLFLAGS := /c
     MODULE_EXT = .dll
     EXE_EXT = .exe
 else
