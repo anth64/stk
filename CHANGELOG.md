@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-02-15
+## [0.1.2] - 2026-02-15
+
+### Fixed
+- **Windows**
+    - Module reload now works correctly, idk how it was broken
+    - Temp directory creation fixed
+    - `.tmp` directory now hidden via FILE_ATTRIBUTE_HIDDEN
+    - Test build fixed
+        - Force cmd.exe shell in gmake.mk
+        - Fix bash syntax errors when running build.bat
+- **All Platforms**: platform_mkdir now checks if directory exists before creating
+
+## [0.1.1] - 2026-02-14
 
 ### Fixed
 - **Logging**: Corrected log level severity order in enum
@@ -15,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixes filtering logic where ERROR/WARN were incorrectly blocked
   - Default INFO level now properly shows INFO, WARN, and ERROR while filtering DEBUG
 
-## [0.1.0] - 2026-02-15
+## [0.1.0] - 2026-02-14
 
 ### Fixed
 - **C89 Compliance**: Removed stdint.h dependency (C99 feature)
@@ -92,7 +104,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/anth64/stk/releases/tag/v0.1.2
+[0.1.1]: https://github.com/anth64/stk/releases/tag/v0.1.1
 [0.1.1]: https://github.com/anth64/stk/releases/tag/v0.1.1
 [0.1.0]: https://github.com/anth64/stk/releases/tag/v0.1.0
 [0.0.4]: https://github.com/anth64/stk/releases/tag/v0.0.4
