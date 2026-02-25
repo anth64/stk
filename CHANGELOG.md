@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-02-25
+
+### Added
+- **Module Metadata**: Optional metadata support for modules
+  - `stk_mod_name` - human-readable module name
+  - `stk_mod_version` - semantic version string
+  - `stk_mod_description` - module description
+  - All three are optional, missing symbols are not errors
+  - Metadata stored in tight-packed arrays with index mappings
+  - Setter functions to override default symbol names before `stk_init()`
+
 ## [0.1.2] - 2026-02-15
 
 ### Fixed

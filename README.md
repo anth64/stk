@@ -146,6 +146,15 @@ stk_set_module_init_fn("my_init");
 /* Set custom shutdown function name (default: "stk_mod_shutdown") */
 stk_set_module_shutdown_fn("my_shutdown");
 
+/* Set function name to get module name */
+stk_set_module_name_fn("my_mod_name");
+
+/* Set function name to get module version */
+stk_set_module_version_fn("my_mod_version");
+
+/* Set functio name to get module description */
+stk_set_module_description_fn("my_mod_description");
+
 /*
  * All the above functions must be called before stk_init()
  * if the defaults need to be changed.
