@@ -6,8 +6,11 @@
 
 /* Buffers */
 #define STK_LOG_PREFIX_BUFFER 64
+#define STK_MOD_DESC_BUFFER 256
 #define STK_MOD_DIR_BUFFER 256
 #define STK_MOD_ID_BUFFER 64
+#define STK_MOD_NAME_BUFFER 128
+#define STK_MOD_VERSION_BUFFER 32
 #define STK_PATH_MAX 256
 #define STK_PATH_MAX_OS 4096
 
@@ -68,6 +71,9 @@ void stk_set_tmp_dir_name(const char *name);
 void stk_set_module_init_fn(const char *name);
 void stk_set_module_shutdown_fn(const char *name);
 void stk_set_logging_enabled(unsigned char enabled);
+void stk_set_module_name_fn(const char *name);
+void stk_set_module_version_fn(const char *name);
+void stk_set_module_description_fn(const char *name);
 unsigned char stk_is_logging_enabled(void);
 
 #ifdef __cplusplus
