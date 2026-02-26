@@ -152,7 +152,7 @@ stk_set_module_name_fn("my_mod_name");
 /* Set function name to get module version */
 stk_set_module_version_fn("my_mod_version");
 
-/* Set functio name to get module description */
+/* Set function name to get module description */
 stk_set_module_description_fn("my_mod_description");
 
 /*
@@ -191,9 +191,9 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 0.1.2 (Pre-release)
+**Current Version:** 0.1.3 (Pre-release)
 
-Fixed Windows compatibility issues.
+Added optional module metadata support.
 
 ### What Works
 - Cross-platform module loading and hot-reloading
@@ -201,9 +201,9 @@ Fixed Windows compatibility issues.
 - Robust hot-reload even during extremely rapid file changes
 - Enhanced logging with levels, timestamps, and filtering
 - Runtime-configurable logging behavior
+- Optional module metadata (name, version, description)
 
 ### In Progress (Phase 1)
-- Module metadata (name, version, description)
 - Dependency management and versioning
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
