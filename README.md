@@ -177,6 +177,10 @@ stk_init();
 - `void stk_set_tmp_dir_name(const char *name)` - Set temp directory name
 - `void stk_set_module_init_fn(const char *name)` - Set module init function name
 - `void stk_set_module_shutdown_fn(const char *name)` - Set module shutdown function name
+- `void stk_set_module_name_fn(const char *name);` - Set module name function name
+- `void stk_set_module_version_fn(const char *name);` - Set module version function name
+- `void stk_set_module_description_fn(const char *name);` - Set module description function name
+- `void stk_set_module_dependencies_fn(const char *name);` - Set module dependencies function name
 
 #### Logging
 - `void stk_set_logging_enabled(unsigned char enabled)` - Enable/disable all logging
