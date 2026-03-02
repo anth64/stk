@@ -6,6 +6,7 @@
 
 /* Buffers */
 #define STK_LOG_PREFIX_BUFFER 64
+#define STK_MOD_DEP_OPERATOR_BUFFER 3
 #define STK_MOD_DESC_BUFFER 256
 #define STK_MOD_DIR_BUFFER 256
 #define STK_MOD_ID_BUFFER 64
@@ -26,6 +27,9 @@
 #define STK_MOD_LIBRARY_LOAD_ERROR 2
 #define STK_MOD_SYMBOL_NOT_FOUND_ERROR 3
 #define STK_MOD_REALLOC_FAILURE 4
+#define STK_MOD_DEP_NOT_FOUND_ERROR 5
+#define STK_MOD_DEP_VERSION_MISMATCH_ERROR 6
+#define STK_MOD_DEP_CIRCULAR_ERROR 7
 
 /* Platform return codes */
 #define STK_PLATFORM_OPERATION_SUCCESS 0
@@ -37,6 +41,11 @@
 /* Settings flags */
 #define STK_FLAG_INITIALIZED 0x01
 #define STK_FLAG_LOGGING_ENABLED 0x02
+
+/* Dependency constraint operators */
+#define STK_DEP_MIN 0
+#define STK_DEP_EXACT 1
+#define STK_DEP_COMPAT 2
 
 #if defined(__linux__) || defined(_WIN32)
 #define STK_EVENT_BUFFER 4096
@@ -74,6 +83,7 @@ void stk_set_logging_enabled(unsigned char enabled);
 void stk_set_module_name_fn(const char *name);
 void stk_set_module_version_fn(const char *name);
 void stk_set_module_description_fn(const char *name);
+void stk_set_module_dependencies_fn(const char *name);
 unsigned char stk_is_logging_enabled(void);
 
 #ifdef __cplusplus
