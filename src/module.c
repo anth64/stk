@@ -560,56 +560,41 @@ void stk_module_unload_all(void)
 	stk_module_free_memory();
 }
 
-void stk_set_module_init_fn(const char *name)
+static void stk_set_fn_name(char *dst, const char *name)
 {
 	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
 		return;
 
-	strncpy(stk_mod_init_name, name, STK_MOD_FUNC_NAME_BUFFER - 1);
-	stk_mod_init_name[STK_MOD_FUNC_NAME_BUFFER - 1] = '\0';
+	strncpy(dst, name, STK_MOD_FUNC_NAME_BUFFER - 1);
+	dst[STK_MOD_FUNC_NAME_BUFFER - 1] = '\0';
+}
+
+void stk_set_module_init_fn(const char *name)
+{
+	stk_set_fn_name(stk_mod_init_name, name);
 }
 
 void stk_set_module_shutdown_fn(const char *name)
 {
-	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
-		return;
-
-	strncpy(stk_mod_shutdown_name, name, STK_MOD_FUNC_NAME_BUFFER - 1);
-	stk_mod_shutdown_name[STK_MOD_FUNC_NAME_BUFFER - 1] = '\0';
+	stk_set_fn_name(stk_mod_shutdown_name, name);
 }
 
 void stk_set_module_name_fn(const char *name)
 {
-	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
-		return;
-
-	strncpy(stk_mod_name_fn, name, STK_MOD_NAME_BUFFER - 1);
-	stk_mod_name_fn[STK_MOD_NAME_BUFFER - 1] = '\0';
+	stk_set_fn_name(stk_mod_name_fn, name);
 }
 
 void stk_set_module_version_fn(const char *name)
 {
-	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
-		return;
-
-	strncpy(stk_mod_version_fn, name, STK_MOD_VERSION_BUFFER - 1);
-	stk_mod_version_fn[STK_MOD_VERSION_BUFFER - 1] = '\0';
+	stk_set_fn_name(stk_mod_version_fn, name);
 }
 
 void stk_set_module_description_fn(const char *name)
 {
-	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
-		return;
-
-	strncpy(stk_mod_description_fn, name, STK_MOD_DESC_BUFFER - 1);
-	stk_mod_description_fn[STK_MOD_DESC_BUFFER - 1] = '\0';
+	stk_set_fn_name(stk_mod_description_fn, name);
 }
 
 void stk_set_module_dependencies_fn(const char *name)
 {
-	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
-		return;
-
-	strncpy(stk_mod_dependencies_fn, name, STK_MOD_FUNC_NAME_BUFFER - 1);
-	stk_mod_dependencies_fn[STK_MOD_FUNC_NAME_BUFFER - 1] = '\0';
+	stk_set_fn_name(stk_mod_dependencies_fn, name);
 }
