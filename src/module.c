@@ -183,6 +183,70 @@ static unsigned char stk_validate_dependencies(size_t count)
 	return STK_MOD_INIT_SUCCESS;
 }
 
+static unsigned char stk_topo_sort(size_t count, size_t *order)
+{
+	size_t *in_degree = NULL;
+	size_t *queue = NULL;
+	size_t head, tail, sorted, i, d;
+	int dep_index;
+	unsigned char result = STK_MOD_INIT_SUCCESS;
+
+	if (count == 0)
+		goto done;
+
+	in_degree = malloc(count * sizeof(size_t));
+	queue = malloc(count * sizeof(size_t));
+
+	if (!in_degree || !queue) {
+		result = STK_MOD_REALLOC_FAILURE;
+		goto done;
+	}
+
+	for (i = 0; i < count; i++)
+		in_degree[i] = 0;
+
+	for (i = 0; i < count; i++)
+		for (d = 0; d < stk_modules[i].dep_count; d++) {
+			dep_index = is_mod_loaded(stk_modules[i].deps[d].id);
+			if (dep_index >= 0)
+				in_degree[i]++;
+		}
+
+	head = tail = sorted = 0;
+
+	for (i = 0; i < count; i++)
+		if (in_degree[i] == 0)
+			queue[tail++] = i;
+
+	while (head < tail) {
+		size_t mod = queue[head++];
+		order[sorted++] = mod;
+
+		for (i = 0; i < count; i++) {
+			for (d = 0; d < stk_modules[i].dep_count; d++) {
+				dep_index =
+				    is_mod_loaded(stk_modules[i].deps[d].id);
+				if (dep_index != (int)mod)
+					continue;
+				if (--in_degree[i] == 0)
+					queue[tail++] = i;
+				break;
+			}
+		}
+	}
+
+	if (sorted != count)
+		result = STK_MOD_DEP_CIRCULAR_ERROR;
+
+done:
+	if (in_degree)
+		free(in_degree);
+	if (queue)
+		free(queue);
+
+	return result;
+}
+
 unsigned char stk_module_load(const char *path, int index)
 {
 	void *handle;
