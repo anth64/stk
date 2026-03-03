@@ -155,6 +155,7 @@ unsigned char stk_validate_dependencies(size_t count)
 {
 	size_t i, d;
 	int found;
+	unsigned char result = STK_MOD_INIT_SUCCESS;
 
 	for (i = 0; i < count; i++) {
 		if (stk_modules[i].dep_count == 0)
@@ -162,20 +163,34 @@ unsigned char stk_validate_dependencies(size_t count)
 
 		for (d = 0; d < stk_modules[i].dep_count; d++) {
 			found = is_mod_loaded(stk_modules[i].deps[d].id);
-			if (found < 0)
-				return STK_MOD_DEP_NOT_FOUND_ERROR;
+			if (found < 0) {
+				stk_log(STK_LOG_ERROR,
+					"Module '%s' requires '%s'",
+					stk_modules[i].id,
+					stk_modules[i].deps[d].id);
+				result = STK_MOD_DEP_NOT_FOUND_ERROR;
+				continue;
+			}
 
 			if (!stk_modules[i].deps[d].version[0])
 				continue;
 
 			if (!stk_validate_constraint(
 				stk_modules[i].deps[d].version,
-				stk_modules[found].version))
-				return STK_MOD_DEP_VERSION_MISMATCH_ERROR;
+				stk_modules[found].version)) {
+				stk_log(
+				    STK_LOG_ERROR,
+				    "Module '%s' requires '%s' %s but has %s",
+				    stk_modules[i].id,
+				    stk_modules[i].deps[d].id,
+				    stk_modules[i].deps[d].version,
+				    stk_modules[found].version);
+				result = STK_MOD_DEP_VERSION_MISMATCH_ERROR;
+			}
 		}
 	}
 
-	return STK_MOD_INIT_SUCCESS;
+	return result;
 }
 
 unsigned char stk_topo_sort(size_t count, size_t *order)
