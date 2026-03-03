@@ -56,6 +56,8 @@ unsigned char stk_module_init_memory(size_t capacity);
 unsigned char stk_module_realloc_memory(size_t new_capacity);
 void stk_module_unload(size_t index);
 void stk_module_unload_all(void);
+unsigned char stk_validate_dependencies(size_t count);
+unsigned char stk_topo_sort(size_t count, size_t *order);
 
 static void build_path(char *dest, size_t dest_size, const char *dir,
 		       const char *file)
@@ -77,6 +79,12 @@ static const char *stk_error_string(int error_code)
 		return "init failure";
 	case STK_MOD_REALLOC_FAILURE:
 		return "memory reallocation failed";
+	case STK_MOD_DEP_NOT_FOUND_ERROR:
+		return "dependency not found";
+	case STK_MOD_DEP_VERSION_MISMATCH_ERROR:
+		return "dependency version mismatch";
+	case STK_MOD_DEP_CIRCULAR_ERROR:
+		return "circular dependency detected";
 	default:
 		return "unknown error";
 	}
@@ -89,6 +97,8 @@ unsigned char stk_init(void)
 	char full_path[STK_PATH_MAX_OS];
 	char tmp_path[STK_PATH_MAX_OS];
 	int load_result;
+	unsigned char dep_result;
+	size_t *order = NULL;
 
 	platform_mkdir(stk_mod_dir);
 	build_path(stk_tmp_dir, sizeof(stk_tmp_dir), stk_mod_dir, stk_tmp_name);
@@ -140,11 +150,30 @@ unsigned char stk_init(void)
 		}
 	}
 
-	if (successful_loads < file_count) {
+	if (successful_loads < file_count)
 		stk_module_realloc_memory(successful_loads);
-	}
 
 	free(files);
+
+	if (module_count == 0)
+		goto scanned;
+
+	dep_result = stk_validate_dependencies(module_count);
+	if (dep_result != STK_MOD_INIT_SUCCESS) {
+		stk_log(STK_LOG_ERROR, "Dependency validation failed: %s",
+			stk_error_string(dep_result));
+		stk_module_unload_all();
+		return dep_result;
+	}
+
+	order = malloc(module_count * sizeof(size_t));
+	if (order) {
+		dep_result = stk_topo_sort(module_count, order);
+		if (dep_result != STK_MOD_INIT_SUCCESS)
+			stk_log(STK_LOG_ERROR, "Dependency sort failed: %s",
+				stk_error_string(dep_result));
+		free(order);
+	}
 
 scanned:
 	watch_handle = platform_directory_watch_start(stk_mod_dir);
@@ -199,6 +228,8 @@ size_t stk_poll(void)
 	int load_result;
 	size_t successful_appends = 0;
 	char (*module_ids)[STK_MOD_ID_BUFFER] = NULL;
+	unsigned char dep_result;
+	size_t *order = NULL;
 
 	if (module_count > 0) {
 		module_ids = malloc(module_count * sizeof(*module_ids));
@@ -276,9 +307,8 @@ size_t stk_poll(void)
 handle_grow:
 	remaining_loads = load_count - unload_count;
 	new_capacity = module_count + remaining_loads;
-	if (stk_module_realloc_memory(new_capacity) != STK_MOD_INIT_SUCCESS) {
+	if (stk_module_realloc_memory(new_capacity) != STK_MOD_INIT_SUCCESS)
 		goto free_poll;
-	}
 
 begin_operations:
 	for (i = 0; i < unload_count; ++i)
@@ -303,11 +333,10 @@ begin_operations:
 		}
 
 		load_result = stk_module_load(tmp_path, mod_index);
-		if (load_result != STK_MOD_INIT_SUCCESS) {
+		if (load_result != STK_MOD_INIT_SUCCESS)
 			stk_log(STK_LOG_ERROR, "Failed to reload module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
-		}
 	}
 
 	holes_to_fill = (load_count < unload_count) ? load_count : unload_count;
@@ -328,11 +357,10 @@ begin_operations:
 		}
 
 		load_result = stk_module_load(tmp_path, target_index);
-		if (load_result != STK_MOD_INIT_SUCCESS) {
+		if (load_result != STK_MOD_INIT_SUCCESS)
 			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
-		}
 	}
 
 	if (load_count > unload_count)
@@ -341,7 +369,7 @@ begin_operations:
 	if (unload_count > load_count)
 		goto trim_arrays;
 
-	goto free_poll;
+	goto validate_deps;
 
 append_modules:
 	for (; i < load_count; ++i) {
@@ -372,11 +400,10 @@ append_modules:
 
 	module_count += successful_appends;
 
-	if (successful_appends < (load_count - holes_to_fill)) {
+	if (successful_appends < (load_count - holes_to_fill))
 		stk_module_realloc_memory(module_count);
-	}
 
-	goto free_poll;
+	goto validate_deps;
 
 trim_arrays:
 	write_pos = unloaded_mod_indices[holes_to_fill];
@@ -394,6 +421,26 @@ trim_arrays:
 
 	module_count = write_pos;
 	stk_module_realloc_memory(module_count);
+
+validate_deps:
+	if (module_count == 0)
+		goto free_poll;
+
+	dep_result = stk_validate_dependencies(module_count);
+	if (dep_result != STK_MOD_INIT_SUCCESS) {
+		stk_log(STK_LOG_ERROR, "Dependency validation failed: %s",
+			stk_error_string(dep_result));
+		goto free_poll;
+	}
+
+	order = malloc(module_count * sizeof(size_t));
+	if (order) {
+		dep_result = stk_topo_sort(module_count, order);
+		if (dep_result != STK_MOD_INIT_SUCCESS)
+			stk_log(STK_LOG_ERROR, "Dependency sort failed: %s",
+				stk_error_string(dep_result));
+		free(order);
+	}
 
 free_poll:
 	free(reloaded_mod_indices);

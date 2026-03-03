@@ -156,7 +156,7 @@ int is_mod_loaded(const char *module_name)
 	return -1;
 }
 
-static unsigned char stk_validate_dependencies(size_t count)
+unsigned char stk_validate_dependencies(size_t count)
 {
 	size_t i, d;
 	int found;
@@ -183,7 +183,7 @@ static unsigned char stk_validate_dependencies(size_t count)
 	return STK_MOD_INIT_SUCCESS;
 }
 
-static unsigned char stk_topo_sort(size_t count, size_t *order)
+unsigned char stk_topo_sort(size_t count, size_t *order)
 {
 	size_t *in_degree = NULL;
 	size_t *queue = NULL;
