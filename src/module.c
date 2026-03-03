@@ -9,6 +9,13 @@ typedef int (*stk_init_mod_func)(void);
 typedef void (*stk_shutdown_mod_func)(void);
 
 typedef struct {
+	unsigned char major;
+	unsigned char minor;
+	unsigned char patch;
+	char op;
+} stk_version_t;
+
+typedef struct {
 	char id[STK_MOD_ID_BUFFER];
 	char version[STK_MOD_VERSION_BUFFER];
 } stk_dep_t;
@@ -44,6 +51,64 @@ static char stk_mod_dependencies_fn[STK_MOD_FUNC_NAME_BUFFER] =
     "stk_mod_dependencies";
 
 size_t module_count = 0;
+
+static stk_version_t stk_parse_version(const char *str)
+{
+	stk_version_t v;
+	v.major = 0;
+	v.minor = 0;
+	v.patch = 0;
+	v.op = '>';
+
+	if (!str || !*str)
+		return v;
+
+	if (*str == '=' && *(str + 1) != '=') {
+		v.op = '=';
+		str++;
+	} else if (*str == '>' && *(str + 1) == '=') {
+		v.op = '>';
+		str += 2;
+	} else if (*str == '^') {
+		v.op = '^';
+		str++;
+	}
+
+	v.major = (unsigned char)strtol(str, (char **)&str, 10);
+	if (*str == '.')
+		str++;
+	v.minor = (unsigned char)strtol(str, (char **)&str, 10);
+	if (*str == '.')
+		str++;
+	v.patch = (unsigned char)strtol(str, NULL, 10);
+
+	return v;
+}
+
+static int stk_compare_version(stk_version_t a, stk_version_t b)
+{
+	if (a.major != b.major)
+		return a.major - b.major;
+	if (a.minor != b.minor)
+		return a.minor - b.minor;
+	return a.patch - b.patch;
+}
+
+static int stk_validate_constraint(const char *constraint, const char *loaded)
+{
+	stk_version_t req = stk_parse_version(constraint);
+	stk_version_t have = stk_parse_version(loaded);
+	int cmp = stk_compare_version(have, req);
+
+	switch (req.op) {
+	case '=':
+		return cmp == 0;
+	case '^':
+		return have.major == req.major && cmp >= 0;
+	default:
+		return cmp >= 0;
+	}
+}
 
 size_t stk_module_count(void) { return module_count; }
 
