@@ -8,6 +8,11 @@
 typedef int (*stk_init_mod_func)(void);
 typedef void (*stk_shutdown_mod_func)(void);
 
+typedef struct {
+	char id[STK_MOD_ID_BUFFER];
+	char version[STK_MOD_VERSION_BUFFER];
+} stk_dep_t;
+
 void *platform_load_library(const char *path);
 void platform_unload_library(void *handle);
 void *platform_get_symbol(void *handle, const char *symbol);
@@ -28,6 +33,11 @@ size_t stk_meta_version_count = 0;
 char (*stk_meta_descs)[STK_MOD_DESC_BUFFER] = NULL;
 size_t *stk_meta_desc_indices = NULL;
 size_t stk_meta_desc_count = 0;
+
+stk_dep_t **stk_deps = NULL;
+size_t *stk_dep_mod_indices = NULL;
+size_t *stk_dep_counts = NULL;
+size_t stk_dep_mod_count = 0;
 
 extern unsigned char stk_flags;
 
