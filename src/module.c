@@ -1,5 +1,6 @@
 #include "platform.h"
 #include "stk.h"
+#include "stk_log.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -229,9 +230,26 @@ unsigned char stk_topo_sort(size_t count, size_t *order)
 		}
 	}
 
-	if (sorted != count)
-		result = STK_MOD_DEP_CIRCULAR_ERROR;
+	if (sorted != count) {
+		size_t j;
+		int in_order;
+		for (i = 0; i < count; i++) {
+			in_order = 0;
+			for (j = 0; j < sorted; j++) {
+				if (order[j] == i) {
+					in_order = 1;
+					break;
+				}
+			}
 
+			if (!in_order)
+				stk_log(STK_LOG_ERROR,
+					"Circular dependency detected with %s",
+					stk_modules[i].id);
+		}
+
+		result = STK_MOD_DEP_CIRCULAR_ERROR;
+	}
 done:
 	if (in_degree)
 		free(in_degree);
