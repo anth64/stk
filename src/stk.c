@@ -8,11 +8,24 @@
 typedef int (*stk_init_mod_func)(void);
 typedef void (*stk_shutdown_mod_func)(void);
 
-extern void **stk_handles;
-extern stk_init_mod_func *stk_inits;
-extern stk_shutdown_mod_func *stk_shutdowns;
-extern char (*stk_module_ids)[STK_MOD_ID_BUFFER];
+typedef struct {
+	char id[STK_MOD_ID_BUFFER];
+	char version[STK_MOD_VERSION_BUFFER];
+} stk_dep_t;
 
+typedef struct {
+	void *handle;
+	stk_init_mod_func init;
+	stk_shutdown_mod_func shutdown;
+	char id[STK_MOD_ID_BUFFER];
+	char name[STK_MOD_NAME_BUFFER];
+	char version[STK_MOD_VERSION_BUFFER];
+	char desc[STK_MOD_DESC_BUFFER];
+	stk_dep_t *deps;
+	size_t dep_count;
+} stk_mod_t;
+
+extern stk_mod_t *stk_modules;
 extern size_t module_count;
 
 unsigned char stk_flags = STK_FLAG_LOGGING_ENABLED;
@@ -185,10 +198,25 @@ size_t stk_poll(void)
 	char mod_id[STK_MOD_ID_BUFFER];
 	int load_result;
 	size_t successful_appends = 0;
+	char (*module_ids)[STK_MOD_ID_BUFFER] = NULL;
 
-	events = platform_directory_watch_check(watch_handle, &file_list,
-						&file_count, stk_module_ids,
-						module_count);
+	if (module_count > 0) {
+		module_ids = malloc(module_count * sizeof(*module_ids));
+		if (module_ids) {
+			for (i = 0; i < module_count; i++) {
+				strncpy(module_ids[i], stk_modules[i].id,
+					STK_MOD_ID_BUFFER - 1);
+				module_ids[i][STK_MOD_ID_BUFFER - 1] = '\0';
+			}
+		}
+	}
+
+	events = platform_directory_watch_check(
+	    watch_handle, &file_list, &file_count, module_ids, module_count);
+
+	if (module_ids)
+		free(module_ids);
+
 	if (!events)
 		goto finish_poll;
 
@@ -358,12 +386,8 @@ trim_arrays:
 	}
 
 	for (read_pos = write_pos + 1; read_pos < module_count; ++read_pos) {
-		if (stk_handles[read_pos] != NULL) {
-			stk_handles[write_pos] = stk_handles[read_pos];
-			stk_inits[write_pos] = stk_inits[read_pos];
-			stk_shutdowns[write_pos] = stk_shutdowns[read_pos];
-			memcpy(stk_module_ids[write_pos],
-			       stk_module_ids[read_pos], STK_MOD_ID_BUFFER);
+		if (stk_modules[read_pos].handle != NULL) {
+			stk_modules[write_pos] = stk_modules[read_pos];
 			++write_pos;
 		}
 	}
