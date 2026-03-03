@@ -156,6 +156,33 @@ int is_mod_loaded(const char *module_name)
 	return -1;
 }
 
+static unsigned char stk_validate_dependencies(size_t count)
+{
+	size_t i, d;
+	int found;
+
+	for (i = 0; i < count; i++) {
+		if (stk_modules[i].dep_count == 0)
+			continue;
+
+		for (d = 0; d < stk_modules[i].dep_count; d++) {
+			found = is_mod_loaded(stk_modules[i].deps[d].id);
+			if (found < 0)
+				return STK_MOD_DEP_NOT_FOUND_ERROR;
+
+			if (!stk_modules[i].deps[d].version[0])
+				continue;
+
+			if (!stk_validate_constraint(
+				stk_modules[i].deps[d].version,
+				stk_modules[found].version))
+				return STK_MOD_DEP_VERSION_MISMATCH_ERROR;
+		}
+	}
+
+	return STK_MOD_INIT_SUCCESS;
+}
+
 unsigned char stk_module_load(const char *path, int index)
 {
 	void *handle;
