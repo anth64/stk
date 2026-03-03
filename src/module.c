@@ -37,6 +37,8 @@ static char stk_mod_shutdown_name[STK_MOD_FUNC_NAME_BUFFER] =
 static char stk_mod_name_fn[STK_MOD_NAME_BUFFER] = "stk_mod_name";
 static char stk_mod_version_fn[STK_MOD_VERSION_BUFFER] = "stk_mod_version";
 static char stk_mod_description_fn[STK_MOD_DESC_BUFFER] = "stk_mod_description";
+static char stk_mod_dependencies_fn[STK_MOD_FUNC_NAME_BUFFER] =
+    "stk_mod_dependencies";
 
 size_t module_count = 0;
 
@@ -601,4 +603,13 @@ void stk_set_module_description_fn(const char *name)
 
 	strncpy(stk_mod_description_fn, name, STK_MOD_DESC_BUFFER - 1);
 	stk_mod_description_fn[STK_MOD_DESC_BUFFER - 1] = '\0';
+}
+
+void stk_set_module_dependencies_fn(const char *name)
+{
+	if (!name || (stk_flags & STK_FLAG_INITIALIZED))
+		return;
+
+	strncpy(stk_mod_dependencies_fn, name, STK_MOD_FUNC_NAME_BUFFER - 1);
+	stk_mod_dependencies_fn[STK_MOD_FUNC_NAME_BUFFER - 1] = '\0';
 }
