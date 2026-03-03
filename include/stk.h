@@ -71,6 +71,11 @@ typedef enum {
 	STK_MOD_RELOAD
 } stk_module_event_t;
 
+typedef struct {
+	char id[STK_MOD_ID_BUFFER];
+	char version[STK_MOD_VERSION_BUFFER];
+} stk_dep_t;
+
 unsigned char stk_init(void);
 void stk_shutdown(void);
 size_t stk_module_count(void);
@@ -83,7 +88,7 @@ void stk_set_logging_enabled(unsigned char enabled);
 void stk_set_module_name_fn(const char *name);
 void stk_set_module_version_fn(const char *name);
 void stk_set_module_description_fn(const char *name);
-void stk_set_module_dependencies_fn(const char *name);
+void stk_set_module_deps_sym(const char *name);
 unsigned char stk_is_logging_enabled(void);
 
 #ifdef __cplusplus

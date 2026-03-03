@@ -9,11 +9,6 @@ typedef int (*stk_init_mod_func)(void);
 typedef void (*stk_shutdown_mod_func)(void);
 
 typedef struct {
-	char id[STK_MOD_ID_BUFFER];
-	char version[STK_MOD_VERSION_BUFFER];
-} stk_dep_t;
-
-typedef struct {
 	void *handle;
 	stk_init_mod_func init;
 	stk_shutdown_mod_func shutdown;

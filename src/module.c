@@ -16,11 +16,6 @@ typedef struct {
 } stk_version_t;
 
 typedef struct {
-	char id[STK_MOD_ID_BUFFER];
-	char version[STK_MOD_VERSION_BUFFER];
-} stk_dep_t;
-
-typedef struct {
 	void *handle;
 	stk_init_mod_func init;
 	stk_shutdown_mod_func shutdown;
@@ -47,8 +42,7 @@ static char stk_mod_name_fn[STK_MOD_FUNC_NAME_BUFFER] = "stk_mod_name";
 static char stk_mod_version_fn[STK_MOD_FUNC_NAME_BUFFER] = "stk_mod_version";
 static char stk_mod_description_fn[STK_MOD_FUNC_NAME_BUFFER] =
     "stk_mod_description";
-static char stk_mod_dependencies_fn[STK_MOD_FUNC_NAME_BUFFER] =
-    "stk_mod_dependencies";
+static char stk_mod_deps_sym[STK_MOD_FUNC_NAME_BUFFER] = "stk_mod_deps";
 
 size_t module_count = 0;
 
@@ -257,10 +251,9 @@ unsigned char stk_module_load(const char *path, int index)
 		stk_init_mod_func init_func;
 		stk_shutdown_mod_func shutdown_func;
 		const char *(*meta_func)(void);
-		const char *(*(*deps_func)(void))[2];
 	} u;
 	const char *meta_str;
-	const char *(*deps)[2];
+	const stk_dep_t *deps;
 	size_t dep_count;
 	stk_dep_t *dep_arr;
 
@@ -313,12 +306,22 @@ unsigned char stk_module_load(const char *path, int index)
 	if (u.obj) {
 		meta_str = u.meta_func();
 		if (meta_str) {
-			strncpy(stk_modules[index].version, meta_str,
-				STK_MOD_VERSION_BUFFER - 1);
+			stk_version_t v = stk_parse_version(meta_str);
+			if (v.major == 0 && v.minor == 0 && v.patch == 0 &&
+			    meta_str[0] != '0') {
+				strncpy(stk_modules[index].version, "0.0.0",
+					STK_MOD_VERSION_BUFFER - 1);
+			} else {
+				strncpy(stk_modules[index].version, meta_str,
+					STK_MOD_VERSION_BUFFER - 1);
+			}
 			stk_modules[index].version[STK_MOD_VERSION_BUFFER - 1] =
 			    '\0';
 		}
 	}
+	if (!stk_modules[index].version[0])
+		strncpy(stk_modules[index].version, "0.0.0",
+			STK_MOD_VERSION_BUFFER - 1);
 
 	stk_modules[index].desc[0] = '\0';
 	u.obj = platform_get_symbol(handle, stk_mod_description_fn);
@@ -333,16 +336,14 @@ unsigned char stk_module_load(const char *path, int index)
 
 	stk_modules[index].deps = NULL;
 	stk_modules[index].dep_count = 0;
-	u.obj = platform_get_symbol(handle, stk_mod_dependencies_fn);
+	u.obj = platform_get_symbol(handle, stk_mod_deps_sym);
 	if (!u.obj)
 		goto skip_deps;
 
-	deps = u.deps_func();
-	if (!deps)
-		goto skip_deps;
+	deps = (const stk_dep_t *)u.obj;
 
 	dep_count = 0;
-	while (deps[dep_count][0] != NULL)
+	while (deps[dep_count].id[0] != '\0')
 		dep_count++;
 
 	if (dep_count == 0)
@@ -355,10 +356,10 @@ unsigned char stk_module_load(const char *path, int index)
 	{
 		size_t d;
 		for (d = 0; d < dep_count; d++) {
-			strncpy(dep_arr[d].id, deps[d][0],
+			strncpy(dep_arr[d].id, deps[d].id,
 				STK_MOD_ID_BUFFER - 1);
 			dep_arr[d].id[STK_MOD_ID_BUFFER - 1] = '\0';
-			strncpy(dep_arr[d].version, deps[d][1],
+			strncpy(dep_arr[d].version, deps[d].version,
 				STK_MOD_VERSION_BUFFER - 1);
 			dep_arr[d].version[STK_MOD_VERSION_BUFFER - 1] = '\0';
 		}
@@ -506,7 +507,7 @@ void stk_set_module_description_fn(const char *name)
 	stk_set_fn_name(stk_mod_description_fn, name);
 }
 
-void stk_set_module_dependencies_fn(const char *name)
+void stk_set_module_deps_sym(const char *name)
 {
-	stk_set_fn_name(stk_mod_dependencies_fn, name);
+	stk_set_fn_name(stk_mod_deps_sym, name);
 }
