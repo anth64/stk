@@ -85,6 +85,36 @@ static const char *stk_error_string(int error_code)
 	}
 }
 
+static void stk_log_module(size_t index)
+{
+	const char *name =
+	    stk_modules[index].name[0] ? stk_modules[index].name : NULL;
+	const char *desc =
+	    stk_modules[index].desc[0] ? stk_modules[index].desc : NULL;
+
+	if (name && desc)
+		stk_log(STK_LOG_INFO, "  %s v%s - %s (%s)",
+			stk_modules[index].id, stk_modules[index].version, desc,
+			name);
+	else if (name)
+		stk_log(STK_LOG_INFO, "  %s v%s (%s)", stk_modules[index].id,
+			stk_modules[index].version, name);
+	else if (desc)
+		stk_log(STK_LOG_INFO, "  %s v%s - %s", stk_modules[index].id,
+			stk_modules[index].version, desc);
+	else
+		stk_log(STK_LOG_INFO, "  %s v%s", stk_modules[index].id,
+			stk_modules[index].version);
+}
+
+static void stk_log_modules(void)
+{
+	size_t i;
+	stk_log(STK_LOG_INFO, "Loaded modules (%lu):", module_count);
+	for (i = 0; i < module_count; i++)
+		stk_log_module(i);
+}
+
 unsigned char stk_init(void)
 {
 	char (*files)[STK_PATH_MAX] = NULL;
@@ -180,9 +210,10 @@ scanned:
 		return STK_INIT_WATCH_ERROR;
 	}
 
-	stk_log(STK_LOG_INFO, "stk v%s initialized! Loaded %lu mod%s from %s/",
-		STK_VERSION_STRING, module_count, module_count != 1 ? "s" : "",
-		stk_mod_dir);
+	stk_log(STK_LOG_INFO, "stk v%s initialized, watching %s/",
+		STK_VERSION_STRING, stk_mod_dir);
+	if (module_count > 0)
+		stk_log_modules();
 
 	stk_flags |= STK_FLAG_INITIALIZED;
 	return STK_INIT_SUCCESS;
@@ -306,8 +337,11 @@ handle_grow:
 		goto free_poll;
 
 begin_operations:
-	for (i = 0; i < unload_count; ++i)
+	for (i = 0; i < unload_count; ++i) {
+		stk_log(STK_LOG_INFO, "Unloaded module: %s",
+			stk_modules[unloaded_mod_indices[i]].id);
 		stk_module_unload(unloaded_mod_indices[i]);
+	}
 
 	for (i = 0; i < reload_count; ++i) {
 		int file_index = reloaded_mod_file_indices[i];
@@ -332,6 +366,8 @@ begin_operations:
 			stk_log(STK_LOG_ERROR, "Failed to reload module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
+		else
+			stk_log_module(mod_index);
 	}
 
 	holes_to_fill = (load_count < unload_count) ? load_count : unload_count;
@@ -356,6 +392,8 @@ begin_operations:
 			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
+		else
+			stk_log_module(target_index);
 	}
 
 	if (load_count > unload_count)
@@ -389,6 +427,7 @@ append_modules:
 				file_list[file_index],
 				stk_error_string(load_result));
 		} else {
+			stk_log_module(module_count + successful_appends);
 			successful_appends++;
 		}
 	}
