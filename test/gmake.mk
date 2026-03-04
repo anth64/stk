@@ -23,16 +23,21 @@ test_program$(EXE_EXT): test.c
 test_mod$(MODULE_EXT): test_mod.c
 	$(CC) $(CFLAGS) -fPIC -shared -o $@ test_mod.c
 
+test_mod_dep$(MODULE_EXT): test_mod_dep.c
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ test_mod_dep.c
+
 setup:
 ifeq ($(OS),Windows_NT)
 	@if not exist mods mkdir mods
 	@if exist test_mod.dll copy /Y test_mod.dll mods\ >nul 2>&1
+	@if exist test_mod_dep.dll copy /Y test_mod_dep.dll mods\ >nul 2>&1
 else
 	@mkdir -p mods
 	@cp -f test_mod.so mods/ 2>/dev/null || true
+	@cp -f test_mod_dep.so mods/ 2>/dev/null || true
 endif
 
-test: test_program$(EXE_EXT) test_mod$(MODULE_EXT) setup
+test: test_program$(EXE_EXT) test_mod$(MODULE_EXT) test_mod_dep$(MODULE_EXT) setup
 ifeq ($(OS),Windows_NT)
 	@set PATH=../bin/debug;%PATH% && cmd /C "test_program.exe"
 else
@@ -41,9 +46,9 @@ endif
 
 clean:
 ifeq ($(OS),Windows_NT)
-	@del /Q test_program.exe test_mod.dll 2>nul || true
+	@del /Q test_program.exe test_mod.dll test_mod_dep.dll 2>nul || true
 	@rmdir /S /Q mods 2>nul || true
 else
-	@rm -f test_program test_mod.so
+	@rm -f test_program test_mod.so test_mod_dep.so
 	@rm -rf mods
 endif

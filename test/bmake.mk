@@ -22,23 +22,27 @@ test_program: test.c
 test_mod$(MODULE_EXT): test_mod.c
 	$(CC) $(CFLAGS) -fPIC -shared -o $@ test_mod.c
 
+test_mod_dep$(MODULE_EXT): test_mod_dep.c
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ test_mod_dep.c
+
 setup:
 	@mkdir -p mods
 	@cp -f test_mod$(MODULE_EXT) mods/ 2>/dev/null || true
-	@echo "Test environment ready: mods/ directory with test_mod$(MODULE_EXT)"
+	@cp -f test_mod_dep$(MODULE_EXT) mods/ 2>/dev/null || true
+	@echo "Test environment ready: mods/ directory with test modules"
 
-run: test_program test_mod$(MODULE_EXT) setup
+run: test_program test_mod$(MODULE_EXT) test_mod_dep$(MODULE_EXT) setup
 	@echo "Running integration test (CTRL+C to exit)..."
 	@./test_program
 
-test: test_program test_mod$(MODULE_EXT) setup
+test: test_program test_mod$(MODULE_EXT) test_mod_dep$(MODULE_EXT) setup
 	@echo "=== stk Integration Test ==="
 	@echo "1. Starting test program"
-	@echo "2. Will load test_mod$(MODULE_EXT) from mods/"
+	@echo "2. Will load test_mod and test_mod_dep from mods/"
 	@echo "3. Press CTRL+C to exit"
 	@echo "============================="
 	@./test_program || echo "Test completed."
 
 clean:
-	rm -f test_program test_mod$(MODULE_EXT)
+	rm -f test_program test_mod$(MODULE_EXT) test_mod_dep$(MODULE_EXT)
 	rm -rf mods/
