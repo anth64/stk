@@ -17,13 +17,13 @@ typedef struct {
 } stk_version_t;
 
 typedef struct {
+	char desc[STK_MOD_DESC_BUFFER];
+	char name[STK_MOD_NAME_BUFFER];
+	char id[STK_MOD_ID_BUFFER];
+	char version[STK_MOD_VERSION_BUFFER];
 	void *handle;
 	stk_init_mod_func init;
 	stk_shutdown_mod_func shutdown;
-	char id[STK_MOD_ID_BUFFER];
-	char name[STK_MOD_NAME_BUFFER];
-	char version[STK_MOD_VERSION_BUFFER];
-	char desc[STK_MOD_DESC_BUFFER];
 	stk_dep_t *deps;
 	size_t dep_count;
 } stk_mod_t;
