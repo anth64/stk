@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.2] - 2026-03-06
+
+### Fixed
+- Module `init` is no longer called if dependencies are not satisfied. The library handle is unloaded and a dep error is returned. 
+
 ## [1.0.0-pre.1] - 2026-03-06
 
 ### Added
@@ -140,7 +145,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.1...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.2...HEAD
+[1.0.0-pre.2]: https://github.com/anth64/stk/compare/v1.0.0-pre.1...v1.0.0-pre.2
 [1.0.0-pre.1]: https://github.com/anth64/stk/compare/v0.1.3...v1.0.0-pre.1
 [0.1.3]: https://github.com/anth64/stk/releases/tag/v0.1.3
 [0.1.2]: https://github.com/anth64/stk/releases/tag/v0.1.2
