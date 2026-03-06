@@ -53,6 +53,9 @@ void stk_module_unload(size_t index);
 void stk_module_unload_all(void);
 unsigned char stk_validate_dependencies(size_t count);
 unsigned char stk_topo_sort(size_t count, size_t *order);
+void stk_pending_add(const char *path);
+void stk_pending_remove(const char *id);
+size_t stk_pending_retry(void);
 
 static void build_path(char *dest, size_t dest_size, const char *dir,
 		       const char *file)
@@ -185,10 +188,21 @@ unsigned char stk_init(void)
 
 	dep_result = stk_validate_dependencies(module_count);
 	if (dep_result != STK_MOD_INIT_SUCCESS) {
-		stk_log(STK_LOG_ERROR, "Dependency validation failed: %s",
-			stk_error_string(dep_result));
-		stk_module_unload_all();
-		return dep_result;
+		size_t j;
+		char mod_tmp_path[STK_PATH_MAX_OS];
+		stk_log(STK_LOG_WARN,
+			"Some modules have unmet dependencies, deferring");
+		for (j = 0; j < module_count; j++) {
+			if (stk_modules[j].dep_count > 0) {
+				build_path(mod_tmp_path, sizeof(mod_tmp_path),
+					   stk_tmp_dir, stk_modules[j].id);
+				strncat(mod_tmp_path, STK_MODULE_EXT,
+					sizeof(mod_tmp_path) -
+					    strlen(mod_tmp_path) - 1);
+				stk_pending_add(mod_tmp_path);
+				stk_module_unload(j);
+			}
+		}
 	}
 
 	order = malloc(module_count * sizeof(size_t));
@@ -340,6 +354,7 @@ begin_operations:
 	for (i = 0; i < unload_count; ++i) {
 		stk_log(STK_LOG_INFO, "Unloaded module: %s",
 			stk_modules[unloaded_mod_indices[i]].id);
+		stk_pending_remove(stk_modules[unloaded_mod_indices[i]].id);
 		stk_module_unload(unloaded_mod_indices[i]);
 	}
 
@@ -366,8 +381,6 @@ begin_operations:
 			stk_log(STK_LOG_ERROR, "Failed to reload module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
-		else
-			stk_log_module(mod_index);
 	}
 
 	holes_to_fill = (load_count < unload_count) ? load_count : unload_count;
@@ -392,8 +405,6 @@ begin_operations:
 			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
-		else
-			stk_log_module(target_index);
 	}
 
 	if (load_count > unload_count)
@@ -427,7 +438,6 @@ append_modules:
 				file_list[file_index],
 				stk_error_string(load_result));
 		} else {
-			stk_log_module(module_count + successful_appends);
 			successful_appends++;
 		}
 	}
@@ -460,12 +470,63 @@ validate_deps:
 	if (module_count == 0)
 		goto free_poll;
 
-	dep_result = stk_validate_dependencies(module_count);
-	if (dep_result != STK_MOD_INIT_SUCCESS) {
-		stk_log(STK_LOG_ERROR, "Dependency validation failed: %s",
-			stk_error_string(dep_result));
-		goto free_poll;
+	{
+		size_t cascade_indices[STK_PATH_MAX];
+		size_t cascade_count;
+		char cascade_tmp_path[STK_PATH_MAX_OS];
+		size_t j, k, cascade_write;
+
+		do {
+			cascade_count = 0;
+
+			for (j = 0; j < module_count; j++) {
+				if (stk_modules[j].dep_count == 0)
+					continue;
+				for (k = 0; k < stk_modules[j].dep_count; k++) {
+					if (is_mod_loaded(
+						stk_modules[j].deps[k].id) <
+					    0) {
+						cascade_indices
+						    [cascade_count++] = j;
+						break;
+					}
+				}
+			}
+
+			if (cascade_count == 0)
+				break;
+
+			for (j = 0; j < cascade_count; j++) {
+				size_t idx = cascade_indices[j];
+				stk_log(STK_LOG_WARN,
+					"Unloading '%s': unmet dependencies",
+					stk_modules[idx].id);
+				build_path(cascade_tmp_path,
+					   sizeof(cascade_tmp_path),
+					   stk_tmp_dir, stk_modules[idx].id);
+				strncat(cascade_tmp_path, STK_MODULE_EXT,
+					sizeof(cascade_tmp_path) -
+					    strlen(cascade_tmp_path) - 1);
+				stk_pending_add(cascade_tmp_path);
+				stk_module_unload(idx);
+			}
+
+			cascade_write = 0;
+			for (j = 0; j < module_count; j++) {
+				if (stk_modules[j].handle != NULL) {
+					if (cascade_write != j)
+						stk_modules[cascade_write] =
+						    stk_modules[j];
+					cascade_write++;
+				}
+			}
+			module_count = cascade_write;
+
+		} while (cascade_count > 0);
 	}
+
+	if (module_count > 0)
+		stk_module_realloc_memory(module_count);
 
 	order = malloc(module_count * sizeof(size_t));
 	if (order) {
@@ -475,6 +536,11 @@ validate_deps:
 				stk_error_string(dep_result));
 		free(order);
 	}
+
+	stk_pending_retry();
+
+	if (module_count > 0)
+		stk_log_modules();
 
 free_poll:
 	free(reloaded_mod_indices);

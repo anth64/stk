@@ -47,6 +47,19 @@ static char stk_mod_deps_sym[STK_MOD_FUNC_NAME_BUFFER] = "stk_mod_deps";
 
 size_t module_count = 0;
 
+static char (*stk_pending)[STK_PATH_MAX_OS] = NULL;
+static size_t stk_pending_count = 0;
+
+void stk_pending_free(void)
+{
+	if (stk_pending) {
+		free(stk_pending);
+		stk_pending = NULL;
+	}
+
+	stk_pending_count = 0;
+}
+
 static stk_version_t stk_parse_version(const char *str)
 {
 	stk_version_t v;
@@ -448,6 +461,7 @@ void stk_module_free_memory(void)
 		stk_modules = NULL;
 	}
 	module_count = 0;
+	stk_pending_free();
 }
 
 unsigned char stk_module_init_memory(size_t capacity)
@@ -504,6 +518,123 @@ void stk_module_unload_all(void)
 		stk_module_unload(i - 1);
 
 	stk_module_free_memory();
+}
+
+void stk_pending_add(const char *path)
+{
+	char (*new_pending)[STK_PATH_MAX_OS];
+	size_t i;
+
+	new_pending = malloc((stk_pending_count + 1) * sizeof(*stk_pending));
+	if (!new_pending)
+		return;
+
+	for (i = 0; i < stk_pending_count; i++)
+		memcpy(new_pending[i], stk_pending[i], STK_PATH_MAX_OS);
+
+	free(stk_pending);
+	stk_pending = new_pending;
+
+	strncpy(stk_pending[stk_pending_count], path, STK_PATH_MAX_OS - 1);
+	stk_pending[stk_pending_count][STK_PATH_MAX_OS - 1] = '\0';
+	stk_pending_count++;
+}
+
+void stk_pending_remove(const char *id)
+{
+	size_t i, write;
+	char pending_id[STK_MOD_ID_BUFFER];
+
+	if (!stk_pending_count)
+		return;
+
+	write = 0;
+	for (i = 0; i < stk_pending_count; i++) {
+		extract_module_id(stk_pending[i], pending_id);
+		if (strncmp(pending_id, id, STK_MOD_ID_BUFFER) == 0)
+			continue;
+		if (write != i)
+			memcpy(stk_pending[write], stk_pending[i],
+			       STK_PATH_MAX_OS);
+		write++;
+	}
+	stk_pending_count = write;
+}
+
+size_t stk_pending_retry(void)
+{
+	size_t i, d, loaded = 0;
+	unsigned char deps_satisfied;
+	unsigned char result;
+	void *handle;
+	union {
+		void *obj;
+		const char *(*meta_func)(void);
+	} u;
+	const stk_dep_t *deps;
+	size_t dep_count;
+	int found;
+
+	if (!stk_pending_count)
+		return 0;
+
+	for (i = 0; i < stk_pending_count; i++) {
+		handle = platform_load_library(stk_pending[i]);
+		if (!handle)
+			continue;
+
+		u.obj = platform_get_symbol(handle, stk_mod_deps_sym);
+		if (!u.obj) {
+			platform_unload_library(handle);
+			goto attempt_load;
+		}
+
+		deps = (const stk_dep_t *)u.obj;
+		dep_count = 0;
+		while (deps[dep_count].id[0] != '\0')
+			dep_count++;
+
+		deps_satisfied = 1;
+		for (d = 0; d < dep_count; d++) {
+			found = is_mod_loaded(deps[d].id);
+			if (found < 0) {
+				deps_satisfied = 0;
+				break;
+			}
+			if (deps[d].version[0] &&
+			    !stk_validate_constraint(
+				deps[d].version, stk_modules[found].version)) {
+				deps_satisfied = 0;
+				break;
+			}
+		}
+
+		platform_unload_library(handle);
+
+		if (!deps_satisfied)
+			continue;
+
+	attempt_load:
+		if (stk_module_realloc_memory(module_count + 1) != 0)
+			continue;
+
+		result = stk_module_load(stk_pending[i], module_count);
+		if (result != STK_MOD_INIT_SUCCESS)
+			continue;
+
+		module_count++;
+		loaded++;
+
+		memcpy(stk_pending[i], stk_pending[stk_pending_count - 1],
+		       STK_PATH_MAX_OS);
+		stk_pending_count--;
+		i--;
+	}
+
+	if (stk_pending_count == 0)
+		stk_pending_free();
+
+	return loaded;
 }
 
 static void stk_set_fn_name(char *dst, const char *name)
