@@ -323,6 +323,32 @@ unsigned char stk_module_load(const char *path, int index)
 
 	extract_module_id(path, module_id);
 
+	u.obj = platform_get_symbol(handle, stk_mod_deps_sym);
+	if (u.obj) {
+		const stk_dep_t *early_deps = (const stk_dep_t *)u.obj;
+		size_t early_dep_count = 0;
+		size_t di;
+		int found;
+
+		while (early_deps[early_dep_count].id[0] != '\0')
+			early_dep_count++;
+
+		for (di = 0; di < early_dep_count; di++) {
+			found = is_mod_loaded(early_deps[di].id);
+			if (found < 0) {
+				platform_unload_library(handle);
+				return STK_MOD_DEP_NOT_FOUND_ERROR;
+			}
+			if (early_deps[di].version[0] &&
+			    !stk_validate_constraint(
+				early_deps[di].version,
+				stk_modules[found].version)) {
+				platform_unload_library(handle);
+				return STK_MOD_DEP_VERSION_MISMATCH_ERROR;
+			}
+		}
+	}
+
 	if (stk_modules[index].init() != STK_MOD_INIT_SUCCESS) {
 		platform_unload_library(handle);
 		return STK_MOD_INIT_FAILURE;
