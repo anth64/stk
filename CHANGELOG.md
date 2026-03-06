@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.1] - 2026-03-06
+
+### Added
+- **Dependency System**: Full module dependency declaration and resolution
+  - Modules declare dependencies via an exported `stk_mod_deps` symbol, no stk headers required in modules, only the memory layout contract must be respected (`{ char[64], char[32] }` sentinel-terminated array)
+  - Version constraint operators: `=` (exact), `>=` (minimum, default), `^` (compatible — same major, greater or equal minor/patch)
+  - Version defaults to `0.0.0` if not provided or unparseable
+  - Dependency validation on `stk_init` and every `stk_poll` cycle
+  - Topological sort with cycle detection, load and unload ordering enforced
+  - All dependency failures logged before returning
+- **Cascade Unload**: When a module is removed, all dependents cascade unload automatically and are added to the pending queue. Cascades repeat until the loaded set is stable
+- **Pending Queue**: Modules that fail dependency validation are deferred. When their dependencies become available they are retried and loaded automatically. Entries are removed if their file is deleted
+
+### Changed
+- `stk_set_module_dependencies_fn` renamed to `stk_set_module_deps_sym`. Deps are now an exported array symbol, not a function
+- Default deps symbol name changed from `stk_mod_dependencies` to `stk_mod_deps`
+- `stk_dep_t` added to public header `stk.h`
+- `stk_mod_t` field order changed to largest-to-smallest for correct memory alignment with zero padding waste
+- Dependency validation failure during `stk_init` no longer fatal, affected modules are deferred to the pending queue
+- Poll cycle now logs the full loaded module list as a single summary after any event that changes the loaded set, instead of logging each module individually
+
+### Notes
+- This release marks Phase 1 complete: hot-reloading foundation with dependency management
+- Memory layout contract for `stk_mod_deps`: sentinel-terminated array of `{ char[64], char[32] }`. Modules do not need to include `stk.h`, define the struct inline or via your engine's own header as long as the layout matches
+
 ## [0.1.3] - 2026-02-25
 
 ### Added
@@ -115,7 +140,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.1...HEAD
+[1.0.0-pre.1]: https://github.com/anth64/stk/compare/v0.1.3...v1.0.0-pre.1
+[0.1.3]: https://github.com/anth64/stk/releases/tag/v0.1.3
 [0.1.2]: https://github.com/anth64/stk/releases/tag/v0.1.2
 [0.1.1]: https://github.com/anth64/stk/releases/tag/v0.1.1
 [0.1.1]: https://github.com/anth64/stk/releases/tag/v0.1.1

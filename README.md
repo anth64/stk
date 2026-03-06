@@ -131,6 +131,42 @@ cc -shared -o my_module.dll my_module.c
 
 Place the compiled module in the `mods/` directory (default), and `stk` will automatically load it and watch for changes.
 
+### Module Metadata
+
+Modules can optionally export metadata functions:
+
+```c
+const char *stk_mod_name(void)        { return "My Module"; }
+const char *stk_mod_version(void)     { return "1.2.0"; }
+const char *stk_mod_description(void) { return "Does something useful"; }
+```
+
+All three are optional. Version defaults to `0.0.0` if not exported or unparseable.
+
+### Declaring Dependencies
+
+Modules declare dependencies via an exported sentinel-terminated array. No stk headers are required in the module. The only requirement is that the memory layout matches: `{ char[64], char[32] }`.
+
+```c
+typedef struct {
+    char id[64];
+    char version[32];
+} dep_t;
+
+dep_t stk_mod_deps[] = {
+    { "physics", ">=2.0.0" },
+    { "renderer", "^1.0.0" },
+    { "", "" }  /* sentinel */
+};
+```
+
+Version constraint operators:
+- `=1.0.0` exact match
+- `>=2.0.0` minimum version, also the default if no operator is specified
+- `^1.0.0` same major, greater or equal minor/patch
+
+If a dependency is removed at runtime, all affected modules are unloaded and queued. When the dependency comes back, they load automatically.
+
 ### Configuration
 
 ```c
@@ -146,14 +182,17 @@ stk_set_module_init_fn("my_init");
 /* Set custom shutdown function name (default: "stk_mod_shutdown") */
 stk_set_module_shutdown_fn("my_shutdown");
 
-/* Set function name to get module name */
+/* Set function name to get module name (default: "stk_mod_name") */
 stk_set_module_name_fn("my_mod_name");
 
-/* Set function name to get module version */
+/* Set function name to get module version (default: "stk_mod_version") */
 stk_set_module_version_fn("my_mod_version");
 
-/* Set function name to get module description */
+/* Set function name to get module description (default: "stk_mod_description") */
 stk_set_module_description_fn("my_mod_description");
+
+/* Set deps array symbol name (default: "stk_mod_deps") */
+stk_set_module_deps_sym("my_mod_deps");
 
 /*
  * All the above functions must be called before stk_init()
@@ -180,7 +219,7 @@ stk_init();
 - `void stk_set_module_name_fn(const char *name);` - Set module name function name
 - `void stk_set_module_version_fn(const char *name);` - Set module version function name
 - `void stk_set_module_description_fn(const char *name);` - Set module description function name
-- `void stk_set_module_dependencies_fn(const char *name);` - Set module dependencies function name
+- `void stk_set_module_deps_sym(const char *name)` - Set module deps array symbol name (default: `stk_mod_deps`)
 
 #### Logging
 - `void stk_set_logging_enabled(unsigned char enabled)` - Enable/disable all logging
@@ -195,9 +234,7 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 0.1.3 (Pre-release)
-
-Added optional module metadata support.
+**Current Version:** 1.0.0-pre.1
 
 ### What Works
 - Cross-platform module loading and hot-reloading
@@ -206,9 +243,13 @@ Added optional module metadata support.
 - Enhanced logging with levels, timestamps, and filtering
 - Runtime-configurable logging behavior
 - Optional module metadata (name, version, description)
+- Dependency declaration, validation, and versioning
+- Cascade unload when dependencies are removed
+- Pending queue with automatic retry when deps become available
+- Topological sort with cycle detection
 
-### In Progress (Phase 1)
-- Dependency management and versioning
+### Phase 2
+- WASM module support
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 

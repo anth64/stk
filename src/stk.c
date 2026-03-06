@@ -497,18 +497,18 @@ validate_deps:
 				break;
 
 			for (j = 0; j < cascade_count; j++) {
-				size_t idx = cascade_indices[j];
+				size_t index = cascade_indices[j];
 				stk_log(STK_LOG_WARN,
 					"Unloading '%s': unmet dependencies",
-					stk_modules[idx].id);
+					stk_modules[index].id);
 				build_path(cascade_tmp_path,
 					   sizeof(cascade_tmp_path),
-					   stk_tmp_dir, stk_modules[idx].id);
+					   stk_tmp_dir, stk_modules[index].id);
 				strncat(cascade_tmp_path, STK_MODULE_EXT,
 					sizeof(cascade_tmp_path) -
 					    strlen(cascade_tmp_path) - 1);
 				stk_pending_add(cascade_tmp_path);
-				stk_module_unload(idx);
+				stk_module_unload(index);
 			}
 
 			cascade_write = 0;
