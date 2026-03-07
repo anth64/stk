@@ -136,10 +136,11 @@ unsigned char stk_init(void)
 	size_t index, test_count;
 	char full_path[STK_PATH_MAX_OS];
 	char tmp_path[STK_PATH_MAX_OS];
-	char mod_tmp_path[STK_PATH_MAX_OS];
 	int load_result;
 	unsigned char dep_result;
 	size_t *order = NULL;
+	char (*init_batch)[STK_PATH_MAX_OS] = NULL;
+	size_t init_batch_count = 0;
 
 	platform_mkdir(stk_mod_dir);
 	build_path(stk_tmp_dir, sizeof(stk_tmp_dir), stk_mod_dir, stk_tmp_name);
@@ -206,17 +207,25 @@ unsigned char stk_init(void)
 				stk_error_string(dep_result));
 	}
 
+	init_batch = malloc(module_count * sizeof(*init_batch));
+
 	for (j = 0; j < module_count; j++) {
 		index = order ? order[j] : j;
 		dep_result = stk_validate_dependencies_single(index);
 		if (dep_result != STK_MOD_INIT_SUCCESS) {
 			stk_log_dependency_failures(index, "Deferring");
-			build_path(mod_tmp_path, sizeof(mod_tmp_path),
-				   stk_tmp_dir, stk_modules[index].id);
-			strncat(mod_tmp_path, STK_MODULE_EXT,
-				sizeof(mod_tmp_path) - strlen(mod_tmp_path) -
-				    1);
-			stk_pending_add(mod_tmp_path);
+			if (init_batch) {
+				build_path(init_batch[init_batch_count],
+					   sizeof(init_batch[init_batch_count]),
+					   stk_tmp_dir, stk_modules[index].id);
+				strncat(
+				    init_batch[init_batch_count],
+				    STK_MODULE_EXT,
+				    sizeof(init_batch[init_batch_count]) -
+					strlen(init_batch[init_batch_count]) -
+					1);
+				init_batch_count++;
+			}
 			stk_module_discard(index);
 			continue;
 		}
@@ -226,6 +235,14 @@ unsigned char stk_init(void)
 			stk_module_discard(index);
 		}
 	}
+
+	if (init_batch_count > 0)
+		stk_pending_add_batch(
+		    (const char (*)[STK_PATH_MAX_OS])init_batch,
+		    init_batch_count);
+
+	free(init_batch);
+	init_batch = NULL;
 
 	if (order) {
 		free(order);
