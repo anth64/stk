@@ -48,6 +48,7 @@ size_t stk_module_count(void);
 unsigned char stk_module_preload(const char *path, int index);
 unsigned char stk_module_activate(size_t index);
 unsigned char stk_validate_dependencies_single(size_t index);
+void stk_log_dependency_failures(size_t index, const char *action);
 void stk_module_discard(size_t index);
 unsigned char stk_module_load(const char *path, int index);
 unsigned char stk_module_load_init(const char *path, int index);
@@ -130,9 +131,12 @@ static void stk_log_modules(void)
 unsigned char stk_init(void)
 {
 	char (*files)[STK_PATH_MAX] = NULL;
-	size_t file_count, i, successful_loads = 0;
+	char (*test_scan)[STK_PATH_MAX];
+	size_t file_count, i, j, write, successful_loads = 0;
+	size_t index, test_count;
 	char full_path[STK_PATH_MAX_OS];
 	char tmp_path[STK_PATH_MAX_OS];
+	char mod_tmp_path[STK_PATH_MAX_OS];
 	int load_result;
 	unsigned char dep_result;
 	size_t *order = NULL;
@@ -140,9 +144,6 @@ unsigned char stk_init(void)
 	platform_mkdir(stk_mod_dir);
 	build_path(stk_tmp_dir, sizeof(stk_tmp_dir), stk_mod_dir, stk_tmp_name);
 	if (platform_mkdir(stk_tmp_dir) != STK_PLATFORM_OPERATION_SUCCESS) {
-		char (*test_scan)[STK_PATH_MAX];
-		size_t test_count;
-
 		test_scan =
 		    platform_directory_init_scan(stk_tmp_dir, &test_count);
 		if (test_scan)
@@ -197,60 +198,49 @@ unsigned char stk_init(void)
 	if (module_count == 0)
 		goto scanned;
 
-	{
-		size_t j, write;
-		char mod_tmp_path[STK_PATH_MAX_OS];
-
-		order = malloc(module_count * sizeof(size_t));
-		if (order) {
-			dep_result = stk_topo_sort(module_count, order);
-			if (dep_result != STK_MOD_INIT_SUCCESS)
-				stk_log(STK_LOG_ERROR,
-					"Dependency sort failed: %s",
-					stk_error_string(dep_result));
-		} else {
-			order = malloc(module_count * sizeof(size_t));
-			if (order)
-				for (j = 0; j < module_count; j++)
-					order[j] = j;
-		}
-
-		for (j = 0; j < module_count; j++) {
-			size_t idx = order ? order[j] : j;
-			dep_result = stk_validate_dependencies_single(idx);
-			if (dep_result != STK_MOD_INIT_SUCCESS) {
-				build_path(mod_tmp_path, sizeof(mod_tmp_path),
-					   stk_tmp_dir, stk_modules[idx].id);
-				strncat(mod_tmp_path, STK_MODULE_EXT,
-					sizeof(mod_tmp_path) -
-					    strlen(mod_tmp_path) - 1);
-				stk_pending_add(mod_tmp_path);
-				stk_module_discard(idx);
-				continue;
-			}
-			if (stk_module_activate(idx) != STK_MOD_INIT_SUCCESS) {
-				stk_log(STK_LOG_ERROR,
-					"Failed to init module %s",
-					stk_modules[idx].id);
-				stk_module_discard(idx);
-			}
-		}
-
-		if (order) {
-			free(order);
-			order = NULL;
-		}
-
-		write = 0;
-		for (j = 0; j < module_count; j++) {
-			if (stk_modules[j].handle != NULL) {
-				if (write != j)
-					stk_modules[write] = stk_modules[j];
-				write++;
-			}
-		}
-		module_count = write;
+	order = malloc(module_count * sizeof(size_t));
+	if (order) {
+		dep_result = stk_topo_sort(module_count, order);
+		if (dep_result != STK_MOD_INIT_SUCCESS)
+			stk_log(STK_LOG_ERROR, "Dependency sort failed: %s",
+				stk_error_string(dep_result));
 	}
+
+	for (j = 0; j < module_count; j++) {
+		index = order ? order[j] : j;
+		dep_result = stk_validate_dependencies_single(index);
+		if (dep_result != STK_MOD_INIT_SUCCESS) {
+			stk_log_dependency_failures(index, "Deferring");
+			build_path(mod_tmp_path, sizeof(mod_tmp_path),
+				   stk_tmp_dir, stk_modules[index].id);
+			strncat(mod_tmp_path, STK_MODULE_EXT,
+				sizeof(mod_tmp_path) - strlen(mod_tmp_path) -
+				    1);
+			stk_pending_add(mod_tmp_path);
+			stk_module_discard(index);
+			continue;
+		}
+		if (stk_module_activate(index) != STK_MOD_INIT_SUCCESS) {
+			stk_log(STK_LOG_ERROR, "Failed to init module %s",
+				stk_modules[index].id);
+			stk_module_discard(index);
+		}
+	}
+
+	if (order) {
+		free(order);
+		order = NULL;
+	}
+
+	write = 0;
+	for (j = 0; j < module_count; j++) {
+		if (stk_modules[j].handle != NULL) {
+			if (write != j)
+				stk_modules[write] = stk_modules[j];
+			write++;
+		}
+	}
+	module_count = write;
 
 scanned:
 	watch_handle = platform_directory_watch_start(stk_mod_dir);
@@ -581,9 +571,7 @@ validate_deps:
 
 		for (j = 0; j < cascade_count; j++) {
 			index = cascade_indices[j];
-			stk_log(STK_LOG_WARN,
-				"Unloading '%s': unmet dependencies",
-				stk_modules[index].id);
+			stk_log_dependency_failures(index, "Unloading");
 			build_path(cascade_tmp_path, sizeof(cascade_tmp_path),
 				   stk_tmp_dir, stk_modules[index].id);
 			strncat(cascade_tmp_path, STK_MODULE_EXT,

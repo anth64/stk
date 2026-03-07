@@ -206,8 +206,18 @@ unsigned char stk_validate_dependencies(size_t count)
 	return result;
 }
 
+/*
+ * has_dep(i, j, ctx): return 1 if node i depends on node j, 0 otherwise.
+ * Used by stk_kahn_sort to abstract over loaded modules vs incoming batch.
+ */
 typedef int (*stk_dep_query_fn)(size_t i, size_t j, void *ctx);
 
+/*
+ * Core Kahn's topological sort. Produces dependencies-first ordering.
+ * on_cycle is called for each node not reachable (i.e. in a cycle).
+ * Returns STK_MOD_INIT_SUCCESS or STK_MOD_DEP_CIRCULAR_ERROR /
+ * STK_MOD_REALLOC_FAILURE.
+ */
 static unsigned char stk_kahn_sort(size_t count, size_t *order,
 				   stk_dep_query_fn has_dep, void *ctx,
 				   void (*on_cycle)(size_t i))
@@ -472,6 +482,87 @@ unsigned char stk_validate_dependencies_single(size_t index)
 	return STK_MOD_INIT_SUCCESS;
 }
 
+void stk_log_dependency_failures(size_t index, const char *action)
+{
+	char buf[STK_MOD_DEP_LOG_BUFFER];
+	size_t d, pos, len;
+	int found;
+	int first = 1;
+
+	if (stk_modules[index].dep_count == 0)
+		return;
+
+	pos = 0;
+	for (d = 0; d < stk_modules[index].dep_count; d++) {
+		found = is_mod_loaded(stk_modules[index].deps[d].id);
+
+		if (found >= 0 &&
+		    (!stk_modules[index].deps[d].version[0] ||
+		     stk_validate_constraint(stk_modules[index].deps[d].version,
+					     stk_modules[found].version)))
+			continue;
+
+		if (!first && pos < sizeof(buf) - 2) {
+			buf[pos++] = ',';
+			buf[pos++] = ' ';
+		}
+		first = 0;
+
+		if (found < 0) {
+			len = strlen(stk_modules[index].deps[d].id);
+			if (pos + len + 12 < sizeof(buf)) {
+				memcpy(buf + pos, stk_modules[index].deps[d].id,
+				       len);
+				pos += len;
+				memcpy(buf + pos, " (not found)", 12);
+				pos += 12;
+			}
+		} else {
+			len = strlen(stk_modules[index].deps[d].id);
+			if (pos + len < sizeof(buf)) {
+				memcpy(buf + pos, stk_modules[index].deps[d].id,
+				       len);
+				pos += len;
+			}
+			if (pos < sizeof(buf) - 1) {
+				buf[pos++] = ' ';
+			}
+			buf[pos++] = '(';
+			len = strlen("requires ");
+			if (pos + len < sizeof(buf)) {
+				memcpy(buf + pos, "requires ", len);
+				pos += len;
+			}
+			len = strlen(stk_modules[index].deps[d].version);
+			if (pos + len < sizeof(buf)) {
+				memcpy(buf + pos,
+				       stk_modules[index].deps[d].version, len);
+				pos += len;
+			}
+			len = strlen(", have ");
+			if (pos + len < sizeof(buf)) {
+				memcpy(buf + pos, ", have ", len);
+				pos += len;
+			}
+			len = strlen(stk_modules[found].version);
+			if (pos + len < sizeof(buf)) {
+				memcpy(buf + pos, stk_modules[found].version,
+				       len);
+				pos += len;
+			}
+			if (pos < sizeof(buf) - 1)
+				buf[pos++] = ')';
+		}
+	}
+
+	if (first)
+		return;
+
+	buf[pos] = '\0';
+	stk_log(STK_LOG_WARN, "%s '%s': unmet deps: %s", action,
+		stk_modules[index].id, buf);
+}
+
 unsigned char stk_module_load(const char *path, int index)
 {
 	unsigned char result;
@@ -631,6 +722,11 @@ static int stk_batch_has_dep(size_t i, size_t j, void *ctx)
 	return result;
 }
 
+/*
+ * Sort file_indices[] (length n) so that within the batch, modules whose ids
+ * appear as dependencies of others come first. Uses already-copied tmp files
+ * to read dep symbols. Falls back to original order if sort fails.
+ */
 void stk_sort_load_order(int *file_indices, size_t n,
 			 char (*file_names)[STK_PATH_MAX], const char *tmp_dir)
 {
@@ -665,6 +761,12 @@ cleanup:
 	free(result);
 }
 
+/*
+ * Expand indices[0..]*in_count to include all loaded modules that transitively
+ * depend on any module already in the set. Writes the expanded set back into
+ * indices[] and updates *out_count. indices[] must have capacity module_count.
+ * Returns 1 if any new dependents were added, 0 otherwise.
+ */
 void stk_collect_dependents(size_t *indices, size_t *count)
 {
 	size_t i, d;
@@ -673,6 +775,7 @@ void stk_collect_dependents(size_t *indices, size_t *count)
 	do {
 		changed = 0;
 		for (i = 0; i < module_count; i++) {
+			/* skip if already in the set */
 			in_set = 0;
 			{
 				size_t k;
@@ -686,6 +789,7 @@ void stk_collect_dependents(size_t *indices, size_t *count)
 			if (in_set)
 				continue;
 
+			/* check if any of its deps are in the set */
 			for (d = 0; d < stk_modules[i].dep_count; d++) {
 				int dep_idx =
 				    is_mod_loaded(stk_modules[i].deps[d].id);
@@ -708,6 +812,11 @@ void stk_collect_dependents(size_t *indices, size_t *count)
 	} while (changed);
 }
 
+/*
+ * Sort indices[] (length n) so that dependents come before their dependencies.
+ * This is the reverse of topological order. indices[] is sorted in-place.
+ * Falls back to reverse-index order if topo sort fails or alloc fails.
+ */
 void stk_sort_unload_order(size_t *indices, size_t n)
 {
 	size_t *topo = NULL;
@@ -727,6 +836,10 @@ void stk_sort_unload_order(size_t *indices, size_t n)
 	if (stk_topo_sort(module_count, topo) != STK_MOD_INIT_SUCCESS)
 		goto fallback;
 
+	/*
+	 * topo[] is dependencies-first. Walk it in reverse to get
+	 * dependents-first, picking only indices that are in our set.
+	 */
 	k = 0;
 	for (i = module_count; i > 0; --i) {
 		size_t mod = topo[i - 1];
@@ -753,6 +866,7 @@ void stk_sort_unload_order(size_t *indices, size_t n)
 fallback:
 	free(topo);
 	free(result);
+	/* reverse index order: higher indices (dependents) first */
 	for (i = 0; i < n / 2; i++) {
 		size_t tmp = indices[i];
 		indices[i] = indices[n - 1 - i];
@@ -777,6 +891,7 @@ void stk_module_unload_all(void)
 			stk_module_unload(order[i]);
 		free(order);
 	} else {
+		/* fallback: reverse index order */
 		for (i = module_count; i > 0; --i)
 			stk_module_unload(i - 1);
 	}
@@ -828,6 +943,7 @@ void stk_pending_add_batch(const char (*paths)[STK_PATH_MAX_OS], size_t count)
 	if (!paths || count == 0)
 		return;
 
+	/* First pass: overwrite existing entries and count truly new ones */
 	new_count = 0;
 	for (i = 0; i < count; i++) {
 		int found = 0;
@@ -863,6 +979,7 @@ void stk_pending_add_batch(const char (*paths)[STK_PATH_MAX_OS], size_t count)
 	free(stk_pending);
 	stk_pending = new_pending;
 
+	/* Second pass: append only the truly new ones */
 	for (i = 0; i < count; i++) {
 		int found = 0;
 		extract_module_id(paths[i], incoming_id);
