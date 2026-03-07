@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.4] - 2026-03-07
+
+### Changed
+- `stk_pending_retry()`: replaced per-module `realloc` at `attempt_load` with a single bulk allocation upfront (`module_count + stk_pending_count`) before the retry loop.
+- `stk_poll()`: replaced per-module `stk_pending_add()` calls inside the unload and cascade loops with batch collection followed by a single `stk_pending_add_batch()` call after each loop.
+
 ## [1.0.0-pre.3] - 2026-03-07
 
 ### Added
@@ -162,7 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.3...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.4...HEAD
+[1.0.0-pre.4]: https://github.com/anth64/stk/compare/v1.0.0-pre.3...v1.0.0-pre.4
 [1.0.0-pre.3]: https://github.com/anth64/stk/compare/v1.0.0-pre.2...v1.0.0-pre.3
 [1.0.0-pre.2]: https://github.com/anth64/stk/compare/v1.0.0-pre.1...v1.0.0-pre.2
 [1.0.0-pre.1]: https://github.com/anth64/stk/compare/v0.1.3...v1.0.0-pre.1
