@@ -331,6 +331,8 @@ size_t stk_poll(void)
 	size_t dep_batch_count = 0;
 	char (*cascade_batch)[STK_PATH_MAX_OS] = NULL;
 	size_t cascade_batch_count = 0;
+	char (*load_batch)[STK_PATH_MAX_OS] = NULL;
+	size_t load_batch_count = 0;
 
 	if (module_count > 0) {
 		module_ids = malloc(module_count * sizeof(*module_ids));
@@ -526,6 +528,9 @@ begin_operations:
 		stk_sort_load_order(loaded_mod_indices, load_count, file_list,
 				    stk_tmp_dir);
 
+	load_batch = malloc(load_count * sizeof(*load_batch));
+	load_batch_count = 0;
+
 	for (i = 0; i < holes_to_fill; ++i) {
 		target_index = unloaded_mod_indices[i];
 		file_index = loaded_mod_indices[i];
@@ -536,7 +541,9 @@ begin_operations:
 		load_result = stk_module_load(tmp_path, target_index);
 		if (load_result == STK_MOD_DEP_NOT_FOUND_ERROR ||
 		    load_result == STK_MOD_DEP_VERSION_MISMATCH_ERROR) {
-			stk_pending_add(tmp_path);
+			if (load_batch)
+				memcpy(load_batch[load_batch_count++], tmp_path,
+				       STK_PATH_MAX_OS);
 		} else if (load_result != STK_MOD_INIT_SUCCESS) {
 			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
@@ -549,7 +556,7 @@ begin_operations:
 	if (load_count > unload_count)
 		goto append_modules;
 
-	goto validate_deps;
+	goto finish_loads;
 
 append_modules:
 	for (; i < load_count; ++i) {
@@ -562,7 +569,9 @@ append_modules:
 							    successful_appends);
 		if (load_result == STK_MOD_DEP_NOT_FOUND_ERROR ||
 		    load_result == STK_MOD_DEP_VERSION_MISMATCH_ERROR) {
-			stk_pending_add(tmp_path);
+			if (load_batch)
+				memcpy(load_batch[load_batch_count++], tmp_path,
+				       STK_PATH_MAX_OS);
 		} else if (load_result != STK_MOD_INIT_SUCCESS) {
 			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
@@ -576,6 +585,15 @@ append_modules:
 
 	if (successful_appends < (load_count - holes_to_fill))
 		stk_module_realloc_memory(module_count);
+
+finish_loads:
+	if (load_batch_count > 0)
+		stk_pending_add_batch(
+		    (const char (*)[STK_PATH_MAX_OS])load_batch,
+		    load_batch_count);
+
+	free(load_batch);
+	load_batch = NULL;
 
 	goto validate_deps;
 
