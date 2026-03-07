@@ -45,6 +45,10 @@ void extract_module_id(const char *path, char *out_id);
 int is_mod_loaded(const char *module_id);
 
 size_t stk_module_count(void);
+unsigned char stk_module_preload(const char *path, int index);
+unsigned char stk_module_activate(size_t index);
+unsigned char stk_validate_dependencies_single(size_t index);
+void stk_module_discard(size_t index);
 unsigned char stk_module_load(const char *path, int index);
 unsigned char stk_module_load_init(const char *path, int index);
 unsigned char stk_module_init_memory(size_t capacity);
@@ -54,8 +58,13 @@ void stk_module_unload_all(void);
 unsigned char stk_validate_dependencies(size_t count);
 unsigned char stk_topo_sort(size_t count, size_t *order);
 void stk_pending_add(const char *path);
+void stk_pending_add_batch(const char (*paths)[STK_PATH_MAX_OS], size_t count);
 void stk_pending_remove(const char *id);
 size_t stk_pending_retry(void);
+void stk_sort_unload_order(size_t *indices, size_t n);
+void stk_collect_dependents(size_t *indices, size_t *count);
+void stk_sort_load_order(int *file_indices, size_t n,
+			 char (*file_names)[STK_PATH_MAX], const char *tmp_dir);
 
 static void build_path(char *dest, size_t dest_size, const char *dir,
 		       const char *file)
@@ -168,13 +177,15 @@ unsigned char stk_init(void)
 			continue;
 		}
 
-		load_result = stk_module_load_init(tmp_path, successful_loads);
+		load_result = stk_module_preload(tmp_path, successful_loads);
 
 		if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
-				files[i], stk_error_string(load_result));
+			stk_log(STK_LOG_ERROR,
+				"Failed to preload module %s: %s", files[i],
+				stk_error_string(load_result));
 		} else {
 			successful_loads++;
+			module_count++;
 		}
 	}
 
@@ -186,32 +197,59 @@ unsigned char stk_init(void)
 	if (module_count == 0)
 		goto scanned;
 
-	dep_result = stk_validate_dependencies(module_count);
-	if (dep_result != STK_MOD_INIT_SUCCESS) {
-		size_t j;
+	{
+		size_t j, write;
 		char mod_tmp_path[STK_PATH_MAX_OS];
-		stk_log(STK_LOG_WARN,
-			"Some modules have unmet dependencies, deferring");
+
+		order = malloc(module_count * sizeof(size_t));
+		if (order) {
+			dep_result = stk_topo_sort(module_count, order);
+			if (dep_result != STK_MOD_INIT_SUCCESS)
+				stk_log(STK_LOG_ERROR,
+					"Dependency sort failed: %s",
+					stk_error_string(dep_result));
+		} else {
+			order = malloc(module_count * sizeof(size_t));
+			if (order)
+				for (j = 0; j < module_count; j++)
+					order[j] = j;
+		}
+
 		for (j = 0; j < module_count; j++) {
-			if (stk_modules[j].dep_count > 0) {
+			size_t idx = order ? order[j] : j;
+			dep_result = stk_validate_dependencies_single(idx);
+			if (dep_result != STK_MOD_INIT_SUCCESS) {
 				build_path(mod_tmp_path, sizeof(mod_tmp_path),
-					   stk_tmp_dir, stk_modules[j].id);
+					   stk_tmp_dir, stk_modules[idx].id);
 				strncat(mod_tmp_path, STK_MODULE_EXT,
 					sizeof(mod_tmp_path) -
 					    strlen(mod_tmp_path) - 1);
 				stk_pending_add(mod_tmp_path);
-				stk_module_unload(j);
+				stk_module_discard(idx);
+				continue;
+			}
+			if (stk_module_activate(idx) != STK_MOD_INIT_SUCCESS) {
+				stk_log(STK_LOG_ERROR,
+					"Failed to init module %s",
+					stk_modules[idx].id);
+				stk_module_discard(idx);
 			}
 		}
-	}
 
-	order = malloc(module_count * sizeof(size_t));
-	if (order) {
-		dep_result = stk_topo_sort(module_count, order);
-		if (dep_result != STK_MOD_INIT_SUCCESS)
-			stk_log(STK_LOG_ERROR, "Dependency sort failed: %s",
-				stk_error_string(dep_result));
-		free(order);
+		if (order) {
+			free(order);
+			order = NULL;
+		}
+
+		write = 0;
+		for (j = 0; j < module_count; j++) {
+			if (stk_modules[j].handle != NULL) {
+				if (write != j)
+					stk_modules[write] = stk_modules[j];
+				write++;
+			}
+		}
+		module_count = write;
 	}
 
 scanned:
@@ -223,6 +261,8 @@ scanned:
 		stk_module_unload_all();
 		return STK_INIT_WATCH_ERROR;
 	}
+
+	stk_pending_retry();
 
 	stk_log(STK_LOG_INFO, "stk v%s initialized, watching %s/",
 		STK_VERSION_STRING, stk_mod_dir);
@@ -262,7 +302,6 @@ size_t stk_poll(void)
 	int *reloaded_mod_indices = NULL, *reloaded_mod_file_indices = NULL,
 	    *unloaded_mod_indices = NULL, *loaded_mod_indices = NULL;
 	size_t remaining_loads, new_capacity, holes_to_fill;
-	size_t write_pos, read_pos;
 	char full_path[STK_PATH_MAX_OS], tmp_path[STK_PATH_MAX_OS];
 	char mod_id[STK_MOD_ID_BUFFER];
 	int load_result;
@@ -270,6 +309,19 @@ size_t stk_poll(void)
 	char (*module_ids)[STK_MOD_ID_BUFFER] = NULL;
 	unsigned char dep_result;
 	size_t *order = NULL;
+	size_t *unload_order = NULL;
+	size_t expanded_count;
+	size_t index, oi;
+	int is_orig;
+	char dep_tmp_path[STK_PATH_MAX_OS];
+	size_t write;
+	size_t li;
+	int fi;
+	int file_index, mod_index, target_index;
+	size_t cascade_indices[STK_PATH_MAX];
+	size_t cascade_count;
+	char cascade_tmp_path[STK_PATH_MAX_OS];
+	size_t j, k, cascade_write;
 
 	if (module_count > 0) {
 		module_ids = malloc(module_count * sizeof(*module_ids));
@@ -351,16 +403,70 @@ handle_grow:
 		goto free_poll;
 
 begin_operations:
-	for (i = 0; i < unload_count; ++i) {
-		stk_log(STK_LOG_INFO, "Unloaded module: %s",
-			stk_modules[unloaded_mod_indices[i]].id);
-		stk_pending_remove(stk_modules[unloaded_mod_indices[i]].id);
-		stk_module_unload(unloaded_mod_indices[i]);
+	unload_order = malloc(module_count * sizeof(size_t));
+	if (unload_order) {
+		expanded_count = unload_count;
+
+		for (i = 0; i < unload_count; i++)
+			unload_order[i] = (size_t)unloaded_mod_indices[i];
+
+		stk_collect_dependents(unload_order, &expanded_count);
+		stk_sort_unload_order(unload_order, expanded_count);
+
+		for (i = 0; i < expanded_count; i++) {
+			index = unload_order[i];
+
+			stk_log(STK_LOG_INFO, "Unloaded module: %s",
+				stk_modules[index].id);
+			stk_pending_remove(stk_modules[index].id);
+
+			is_orig = 0;
+			for (oi = 0; oi < unload_count; oi++) {
+				if ((size_t)unloaded_mod_indices[oi] == index) {
+					is_orig = 1;
+					break;
+				}
+			}
+			if (!is_orig) {
+				build_path(dep_tmp_path, sizeof(dep_tmp_path),
+					   stk_tmp_dir, stk_modules[index].id);
+				strncat(dep_tmp_path, STK_MODULE_EXT,
+					sizeof(dep_tmp_path) -
+					    strlen(dep_tmp_path) - 1);
+				stk_pending_add(dep_tmp_path);
+			}
+
+			stk_module_unload(index);
+		}
+		free(unload_order);
+		unload_order = NULL;
+	} else {
+		for (i = 0; i < unload_count; ++i) {
+			stk_log(STK_LOG_INFO, "Unloaded module: %s",
+				stk_modules[unloaded_mod_indices[i]].id);
+			stk_pending_remove(
+			    stk_modules[unloaded_mod_indices[i]].id);
+			stk_module_unload(unloaded_mod_indices[i]);
+		}
+	}
+
+	if (unload_count > 0) {
+		write = 0;
+		for (i = 0; i < module_count; i++) {
+			if (stk_modules[i].handle != NULL) {
+				if (write != i)
+					stk_modules[write] = stk_modules[i];
+				write++;
+			}
+		}
+		module_count = write;
+		if (module_count > 0)
+			stk_module_realloc_memory(module_count);
 	}
 
 	for (i = 0; i < reload_count; ++i) {
-		int file_index = reloaded_mod_file_indices[i];
-		int mod_index = reloaded_mod_indices[i];
+		file_index = reloaded_mod_file_indices[i];
+		mod_index = reloaded_mod_indices[i];
 
 		build_path(full_path, sizeof(full_path), stk_mod_dir,
 			   file_list[file_index]);
@@ -384,56 +490,58 @@ begin_operations:
 	}
 
 	holes_to_fill = (load_count < unload_count) ? load_count : unload_count;
-	for (i = 0; i < holes_to_fill; ++i) {
-		int target_index = unloaded_mod_indices[i];
-		int file_index = loaded_mod_indices[i];
 
+	for (li = 0; li < load_count; li++) {
+		fi = loaded_mod_indices[li];
 		build_path(full_path, sizeof(full_path), stk_mod_dir,
-			   file_list[file_index]);
+			   file_list[fi]);
+		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
+			   file_list[fi]);
+		platform_copy_file(full_path, tmp_path);
+	}
+
+	if (load_count > 1)
+		stk_sort_load_order(loaded_mod_indices, load_count, file_list,
+				    stk_tmp_dir);
+
+	for (i = 0; i < holes_to_fill; ++i) {
+		target_index = unloaded_mod_indices[i];
+		file_index = loaded_mod_indices[i];
+
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
 			   file_list[file_index]);
 
-		if (platform_copy_file(full_path, tmp_path) !=
-		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(STK_LOG_ERROR, "Failed to copy %s for loading",
-				file_list[file_index]);
-			continue;
-		}
-
 		load_result = stk_module_load(tmp_path, target_index);
-		if (load_result != STK_MOD_INIT_SUCCESS)
+		if (load_result == STK_MOD_DEP_NOT_FOUND_ERROR ||
+		    load_result == STK_MOD_DEP_VERSION_MISMATCH_ERROR) {
+			stk_pending_add(tmp_path);
+		} else if (load_result != STK_MOD_INIT_SUCCESS) {
 			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
+		} else {
+			module_count++;
+		}
 	}
 
 	if (load_count > unload_count)
 		goto append_modules;
 
-	if (unload_count > load_count)
-		goto trim_arrays;
-
 	goto validate_deps;
 
 append_modules:
 	for (; i < load_count; ++i) {
-		int file_index = loaded_mod_indices[i];
+		file_index = loaded_mod_indices[i];
 
-		build_path(full_path, sizeof(full_path), stk_mod_dir,
-			   file_list[file_index]);
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
 			   file_list[file_index]);
 
-		if (platform_copy_file(full_path, tmp_path) !=
-		    STK_PLATFORM_OPERATION_SUCCESS) {
-			stk_log(STK_LOG_ERROR, "Failed to copy %s for loading",
-				file_list[file_index]);
-			continue;
-		}
-
 		load_result = stk_module_load(tmp_path, module_count +
 							    successful_appends);
-		if (load_result != STK_MOD_INIT_SUCCESS) {
+		if (load_result == STK_MOD_DEP_NOT_FOUND_ERROR ||
+		    load_result == STK_MOD_DEP_VERSION_MISMATCH_ERROR) {
+			stk_pending_add(tmp_path);
+		} else if (load_result != STK_MOD_INIT_SUCCESS) {
 			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
 				file_list[file_index],
 				stk_error_string(load_result));
@@ -449,81 +557,54 @@ append_modules:
 
 	goto validate_deps;
 
-trim_arrays:
-	write_pos = unloaded_mod_indices[holes_to_fill];
-	for (i = holes_to_fill + 1; i < unload_count; ++i) {
-		if (unloaded_mod_indices[i] < write_pos)
-			write_pos = unloaded_mod_indices[i];
-	}
-
-	for (read_pos = write_pos + 1; read_pos < module_count; ++read_pos) {
-		if (stk_modules[read_pos].handle != NULL) {
-			stk_modules[write_pos] = stk_modules[read_pos];
-			++write_pos;
-		}
-	}
-
-	module_count = write_pos;
-	stk_module_realloc_memory(module_count);
-
 validate_deps:
 	if (module_count == 0)
 		goto free_poll;
 
-	{
-		size_t cascade_indices[STK_PATH_MAX];
-		size_t cascade_count;
-		char cascade_tmp_path[STK_PATH_MAX_OS];
-		size_t j, k, cascade_write;
+	do {
+		cascade_count = 0;
 
-		do {
-			cascade_count = 0;
-
-			for (j = 0; j < module_count; j++) {
-				if (stk_modules[j].dep_count == 0)
-					continue;
-				for (k = 0; k < stk_modules[j].dep_count; k++) {
-					if (is_mod_loaded(
-						stk_modules[j].deps[k].id) <
-					    0) {
-						cascade_indices
-						    [cascade_count++] = j;
-						break;
-					}
+		for (j = 0; j < module_count; j++) {
+			if (stk_modules[j].dep_count == 0)
+				continue;
+			for (k = 0; k < stk_modules[j].dep_count; k++) {
+				if (is_mod_loaded(stk_modules[j].deps[k].id) <
+				    0) {
+					cascade_indices[cascade_count++] = j;
+					break;
 				}
 			}
+		}
 
-			if (cascade_count == 0)
-				break;
+		if (cascade_count == 0)
+			break;
 
-			for (j = 0; j < cascade_count; j++) {
-				size_t index = cascade_indices[j];
-				stk_log(STK_LOG_WARN,
-					"Unloading '%s': unmet dependencies",
-					stk_modules[index].id);
-				build_path(cascade_tmp_path,
-					   sizeof(cascade_tmp_path),
-					   stk_tmp_dir, stk_modules[index].id);
-				strncat(cascade_tmp_path, STK_MODULE_EXT,
-					sizeof(cascade_tmp_path) -
-					    strlen(cascade_tmp_path) - 1);
-				stk_pending_add(cascade_tmp_path);
-				stk_module_unload(index);
+		for (j = 0; j < cascade_count; j++) {
+			index = cascade_indices[j];
+			stk_log(STK_LOG_WARN,
+				"Unloading '%s': unmet dependencies",
+				stk_modules[index].id);
+			build_path(cascade_tmp_path, sizeof(cascade_tmp_path),
+				   stk_tmp_dir, stk_modules[index].id);
+			strncat(cascade_tmp_path, STK_MODULE_EXT,
+				sizeof(cascade_tmp_path) -
+				    strlen(cascade_tmp_path) - 1);
+			stk_pending_add(cascade_tmp_path);
+			stk_module_unload(index);
+		}
+
+		cascade_write = 0;
+		for (j = 0; j < module_count; j++) {
+			if (stk_modules[j].handle != NULL) {
+				if (cascade_write != j)
+					stk_modules[cascade_write] =
+					    stk_modules[j];
+				cascade_write++;
 			}
+		}
+		module_count = cascade_write;
 
-			cascade_write = 0;
-			for (j = 0; j < module_count; j++) {
-				if (stk_modules[j].handle != NULL) {
-					if (cascade_write != j)
-						stk_modules[cascade_write] =
-						    stk_modules[j];
-					cascade_write++;
-				}
-			}
-			module_count = cascade_write;
-
-		} while (cascade_count > 0);
-	}
+	} while (cascade_count > 0);
 
 	if (module_count > 0)
 		stk_module_realloc_memory(module_count);
@@ -537,12 +618,12 @@ validate_deps:
 		free(order);
 	}
 
+free_poll:
 	stk_pending_retry();
 
 	if (module_count > 0)
 		stk_log_modules();
 
-free_poll:
 	free(reloaded_mod_indices);
 	free(reloaded_mod_file_indices);
 	free(unloaded_mod_indices);
