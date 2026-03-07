@@ -1026,6 +1026,9 @@ size_t stk_pending_retry(void)
 		return 0;
 	}
 
+	if (stk_module_realloc_memory(module_count + stk_pending_count) != 0)
+		return 0;
+
 	for (i = 0; i < stk_pending_count; i++) {
 		extract_module_id(stk_pending[i], pending_id);
 		if (is_mod_loaded(pending_id) >= 0) {
@@ -1073,9 +1076,6 @@ size_t stk_pending_retry(void)
 			continue;
 
 	attempt_load:
-		if (stk_module_realloc_memory(module_count + 1) != 0)
-			continue;
-
 		result = stk_module_load(stk_pending[i], module_count);
 		if (result != STK_MOD_INIT_SUCCESS)
 			continue;
