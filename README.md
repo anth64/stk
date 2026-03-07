@@ -234,7 +234,7 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 1.0.0-pre.1
+**Current Version:** 1.0.0-pre.3
 
 ### What Works
 - Cross-platform module loading and hot-reloading
@@ -244,6 +244,7 @@ stk_init();
 - Runtime-configurable logging behavior
 - Optional module metadata (name, version, description)
 - Dependency declaration, validation, and versioning
+- Detailed dependency failure logging (missing ids, version mismatches)
 - Cascade unload when dependencies are removed
 - Pending queue with automatic retry when deps become available
 - Topological sort with cycle detection

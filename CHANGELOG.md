@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.3] - 2026-03-07
+
+### Added
+- `STK_MOD_DEP_LOG_BUFFER` (2048) added to `stk.h`
+
+### Changed
+- Dependency failure logging now emits a single line per module listing all unmet deps with their reason: `not found` or `requires <constraint>, have <version>`
+  - `Deferring 'test_mod_dep': unmet deps: test_mod (not found)`
+  - `Unloading 'test_mod_dep': unmet deps: test_mod (not found), renderer (requires ^2.0.0, have 1.3.0)`
+- Silent defer at `stk_init` and vague `"unmet dependencies"` cascade log in `stk_poll` replaced with `stk_log_dependency_failures()`
+- Kahn topological sort refactored into generic `stk_kahn_sort()` accepting a `has_dep` callback and an `on_cycle` callback, decoupling it from `stk_modules`. `stk_topo_sort()` is now a thin wrapper. `stk_sort_load_order()` uses the same core via `stk_batch_has_dep()`, inspecting tmp files so simultaneous load events are processed dependency-first without a retry cycle
+- `stk_module_load()` split into `stk_module_preload()`, `stk_module_activate()`, `stk_module_discard()`, and `stk_validate_dependencies_single()`. Init is not called if deps are unmet
+- On UNLOAD events in `stk_poll()`, the unload set is expanded to include all transitively dependent modules via `stk_collect_dependents()`, sorted dependents-first via `stk_sort_unload_order()`. Modules unloaded due to expansion are queued to pending
+- On LOAD events with unmet dependencies, the tmp path is added to the pending queue instead of being dropped
+- `stk_pending_retry()` now skips already-loaded entries and prunes entries whose file no longer exists
+- `free_poll` label moved above `stk_pending_retry()` so retry always runs regardless of exit path
+
 ## [1.0.0-pre.2] - 2026-03-06
 
 ### Fixed
@@ -145,7 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.2...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.3...HEAD
+[1.0.0-pre.3]: https://github.com/anth64/stk/compare/v1.0.0-pre.2...v1.0.0-pre.3
 [1.0.0-pre.2]: https://github.com/anth64/stk/compare/v1.0.0-pre.1...v1.0.0-pre.2
 [1.0.0-pre.1]: https://github.com/anth64/stk/compare/v0.1.3...v1.0.0-pre.1
 [0.1.3]: https://github.com/anth64/stk/releases/tag/v0.1.3
