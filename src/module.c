@@ -563,6 +563,7 @@ unsigned char stk_module_load(const char *path, int index)
 
 	result = stk_validate_dependencies_single(index);
 	if (result != STK_MOD_INIT_SUCCESS) {
+		stk_log_dependency_failures(index, "Deferring");
 		stk_module_discard(index);
 		return result;
 	}
