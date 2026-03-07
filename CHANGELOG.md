@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.7] - 2026-03-07
+
+### Fixed
+- `stk_module_load()`: added missing dependency failure logging when a module is deferred to the pending queue.
+
 ## [1.0.0-pre.6] - 2026-03-07
 
 ### Changed
@@ -178,7 +183,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.6...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.7...HEAD
+[1.0.0-pre.7]: https://github.com/anth64/stk/compare/v1.0.0-pre.6...v1.0.0-pre.7
 [1.0.0-pre.6]: https://github.com/anth64/stk/compare/v1.0.0-pre.5...v1.0.0-pre.6
 [1.0.0-pre.5]: https://github.com/anth64/stk/compare/v1.0.0-pre.4...v1.0.0-pre.5
 [1.0.0-pre.4]: https://github.com/anth64/stk/compare/v1.0.0-pre.3...v1.0.0-pre.4

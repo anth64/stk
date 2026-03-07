@@ -234,7 +234,7 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 1.0.0-pre.6
+**Current Version:** 1.0.0-pre.7
 
 ### What Works
 - Cross-platform module loading and hot-reloading
