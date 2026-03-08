@@ -747,7 +747,7 @@ cleanup:
 	free(result);
 }
 
-void stk_collect_dependents(size_t *indices, size_t *count)
+void stk_collect_dependents(size_t *indices, size_t *count, size_t capacity)
 {
 	size_t i, d;
 	int in_set, changed;
@@ -778,6 +778,8 @@ void stk_collect_dependents(size_t *indices, size_t *count)
 					for (k = 0; k < *count; k++) {
 						if (indices[k] ==
 						    (size_t)dep_index) {
+							if (*count >= capacity)
+								goto next_module;
 							indices[(*count)++] = i;
 							changed = 1;
 							goto next_module;
@@ -1092,6 +1094,9 @@ size_t stk_pending_retry(void)
 
 	if (stk_pending_count == 0)
 		stk_pending_free();
+
+	if (loaded > 0)
+		stk_module_realloc_memory(module_count);
 
 	return loaded;
 }

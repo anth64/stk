@@ -63,7 +63,7 @@ void stk_pending_add_batch(const char (*paths)[STK_PATH_MAX_OS], size_t count);
 void stk_pending_remove(const char *id);
 size_t stk_pending_retry(void);
 void stk_sort_unload_order(size_t *indices, size_t n);
-void stk_collect_dependents(size_t *indices, size_t *count);
+void stk_collect_dependents(size_t *indices, size_t *count, size_t capacity);
 void stk_sort_load_order(int *file_indices, size_t n,
 			 char (*file_names)[STK_PATH_MAX], const char *tmp_dir);
 
@@ -123,7 +123,8 @@ static void stk_log_module(size_t index)
 static void stk_log_modules(void)
 {
 	size_t i;
-	stk_log(STK_LOG_INFO, "Loaded modules (%lu):", module_count);
+	stk_log(STK_LOG_INFO,
+		"Loaded modules (%lu):", (unsigned long)module_count);
 	for (i = 0; i < module_count; i++)
 		stk_log_module(i);
 }
@@ -308,7 +309,7 @@ size_t stk_poll(void)
 		  unload_count = 0;
 	int *reloaded_mod_indices = NULL, *reloaded_mod_file_indices = NULL,
 	    *unloaded_mod_indices = NULL, *loaded_mod_indices = NULL;
-	size_t remaining_loads, new_capacity, holes_to_fill;
+	size_t new_capacity;
 	char full_path[STK_PATH_MAX_OS], tmp_path[STK_PATH_MAX_OS];
 	char mod_id[STK_MOD_ID_BUFFER];
 	int load_result;
@@ -321,10 +322,8 @@ size_t stk_poll(void)
 	size_t index, oi;
 	int is_orig;
 	size_t write;
-	size_t li;
-	int fi;
-	int file_index, mod_index, target_index;
-	size_t cascade_indices[STK_PATH_MAX];
+	int file_index, mod_index;
+	size_t *cascade_indices = NULL;
 	size_t cascade_count;
 	size_t j, k, cascade_write;
 	char (*dep_batch)[STK_PATH_MAX_OS] = NULL;
@@ -408,8 +407,7 @@ size_t stk_poll(void)
 	goto begin_operations;
 
 handle_grow:
-	remaining_loads = load_count - unload_count;
-	new_capacity = module_count + remaining_loads;
+	new_capacity = module_count + load_count;
 	if (stk_module_realloc_memory(new_capacity) != STK_MOD_INIT_SUCCESS)
 		goto free_poll;
 
@@ -421,7 +419,8 @@ begin_operations:
 		for (i = 0; i < unload_count; i++)
 			unload_order[i] = (size_t)unloaded_mod_indices[i];
 
-		stk_collect_dependents(unload_order, &expanded_count);
+		stk_collect_dependents(unload_order, &expanded_count,
+				       module_count);
 		stk_sort_unload_order(unload_order, expanded_count);
 
 		dep_batch = malloc(expanded_count * sizeof(*dep_batch));
@@ -513,14 +512,12 @@ begin_operations:
 				stk_error_string(load_result));
 	}
 
-	holes_to_fill = (load_count < unload_count) ? load_count : unload_count;
-
-	for (li = 0; li < load_count; li++) {
-		fi = loaded_mod_indices[li];
+	for (i = 0; i < load_count; i++) {
+		file_index = loaded_mod_indices[i];
 		build_path(full_path, sizeof(full_path), stk_mod_dir,
-			   file_list[fi]);
+			   file_list[file_index]);
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
-			   file_list[fi]);
+			   file_list[file_index]);
 		platform_copy_file(full_path, tmp_path);
 	}
 
@@ -531,35 +528,7 @@ begin_operations:
 	load_batch = malloc(load_count * sizeof(*load_batch));
 	load_batch_count = 0;
 
-	for (i = 0; i < holes_to_fill; ++i) {
-		target_index = unloaded_mod_indices[i];
-		file_index = loaded_mod_indices[i];
-
-		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
-			   file_list[file_index]);
-
-		load_result = stk_module_load(tmp_path, target_index);
-		if (load_result == STK_MOD_DEP_NOT_FOUND_ERROR ||
-		    load_result == STK_MOD_DEP_VERSION_MISMATCH_ERROR) {
-			if (load_batch)
-				memcpy(load_batch[load_batch_count++], tmp_path,
-				       STK_PATH_MAX_OS);
-		} else if (load_result != STK_MOD_INIT_SUCCESS) {
-			stk_log(STK_LOG_ERROR, "Failed to load module %s: %s",
-				file_list[file_index],
-				stk_error_string(load_result));
-		} else {
-			module_count++;
-		}
-	}
-
-	if (load_count > unload_count)
-		goto append_modules;
-
-	goto finish_loads;
-
-append_modules:
-	for (; i < load_count; ++i) {
+	for (i = 0; i < load_count; ++i) {
 		file_index = loaded_mod_indices[i];
 
 		build_path(tmp_path, sizeof(tmp_path), stk_tmp_dir,
@@ -583,10 +552,9 @@ append_modules:
 
 	module_count += successful_appends;
 
-	if (successful_appends < (load_count - holes_to_fill))
+	if (successful_appends < load_count)
 		stk_module_realloc_memory(module_count);
 
-finish_loads:
 	if (load_batch_count > 0)
 		stk_pending_add_batch(
 		    (const char (*)[STK_PATH_MAX_OS])load_batch,
@@ -604,6 +572,10 @@ validate_deps:
 	do {
 		cascade_count = 0;
 
+		cascade_indices = malloc(module_count * sizeof(size_t));
+		if (!cascade_indices)
+			break;
+
 		for (j = 0; j < module_count; j++) {
 			if (stk_modules[j].dep_count == 0)
 				continue;
@@ -616,8 +588,11 @@ validate_deps:
 			}
 		}
 
-		if (cascade_count == 0)
+		if (cascade_count == 0) {
+			free(cascade_indices);
+			cascade_indices = NULL;
 			break;
+		}
 
 		cascade_batch = malloc(cascade_count * sizeof(*cascade_batch));
 		cascade_batch_count = 0;
@@ -660,6 +635,9 @@ validate_deps:
 			}
 		}
 		module_count = cascade_write;
+
+		free(cascade_indices);
+		cascade_indices = NULL;
 
 	} while (cascade_count > 0);
 

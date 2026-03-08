@@ -14,7 +14,7 @@ It is designed to run on modern systems running POSIX and Windows using C89.
 - **Hot-swapping** of modules at runtime
 - **Cross-platform** (Linux, BSD, Windows, macOS)
 - **Optional WASM support** for multi-language modules (planned)
-- **Developer tools**: lightweight metadata, logging/tracing, and dependency management (in progress)
+- **Developer tools**: lightweight metadata, logging/tracing, and dependency management
 - **Minimal, portable API**
 
 ---
@@ -234,7 +234,7 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 1.0.0-pre.7
+**Current Version:** 1.0.0-pre.8
 
 ### What Works
 - Cross-platform module loading and hot-reloading

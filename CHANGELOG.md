@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.8] - 2026-03-08
+
+### Fixed
+- `stk_poll()`: stale index corruption when simultaneous load and unload events occurred in the same poll cycle. New modules were previously loaded into pre-compaction slot indices; they now always append to the compacted array via `module_count + successful_appends`, matching the `append_modules` path. The two load loops have been unified into one.
+- `stk_poll()`: `cascade_indices` was a fixed-size stack array of `STK_PATH_MAX` (256) elements with no bounds check. It is now heap-allocated to `module_count` entries per iteration, eliminating the silent overflow risk.
+- `stk_pending_retry()`: module array was pre-allocated to `module_count + stk_pending_count` but never shrunk when fewer entries loaded than were pending. Now calls `stk_module_realloc_memory(module_count)` after the retry loop completes.
+- `stk_collect_dependents()`: missing bounds guard on the `indices` write: `(*count)++` had no check against the buffer capacity before writing. Added `capacity` parameter (passed as `module_count` from the call site) and a guard that skips the write if the capacity is reached, preventing a silent overflow.
+- `stk_log_modules()`: `%lu` format specifier used with `size_t` is undefined behaviour on platforms where `unsigned long` is narrower than `size_t` (e.g. MSVC 64-bit). Fixed with an explicit `(unsigned long)` cast, preserving C89 compatibility.
+
 ## [1.0.0-pre.7] - 2026-03-07
 
 ### Fixed
@@ -183,7 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.7...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.8...HEAD
+[1.0.0-pre.8]: https://github.com/anth64/stk/compare/v1.0.0-pre.7...v1.0.0-pre.8
 [1.0.0-pre.7]: https://github.com/anth64/stk/compare/v1.0.0-pre.6...v1.0.0-pre.7
 [1.0.0-pre.6]: https://github.com/anth64/stk/compare/v1.0.0-pre.5...v1.0.0-pre.6
 [1.0.0-pre.5]: https://github.com/anth64/stk/compare/v1.0.0-pre.4...v1.0.0-pre.5
