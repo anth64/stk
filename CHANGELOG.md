@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.9] - 2026-03-12
+
+### Changed
+- `debug` and `release` targets now produce both a shared and static library alongside each other
+- obj directories split into `shared/` and `static/` subdirs to keep `-fPIC` objects isolated
+- `install` no longer depends on `release`; guards with an existence check and exits with a clear message if artifacts are missing
+- `uninstall` removes static lib alongside shared lib
+- `build.sh`: `install` and `uninstall` now handle privilege escalation automatically via `doas` or `sudo`; skips escalation if already root
+
 ## [1.0.0-pre.8] - 2026-03-08
 
 ### Fixed
@@ -192,7 +201,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.8...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.9...HEAD
+[1.0.0-pre.9]: https://github.com/anth64/stk/compare/v1.0.0-pre.8...v1.0.0-pre.9
 [1.0.0-pre.8]: https://github.com/anth64/stk/compare/v1.0.0-pre.7...v1.0.0-pre.8
 [1.0.0-pre.7]: https://github.com/anth64/stk/compare/v1.0.0-pre.6...v1.0.0-pre.7
 [1.0.0-pre.6]: https://github.com/anth64/stk/compare/v1.0.0-pre.5...v1.0.0-pre.6

@@ -43,19 +43,19 @@ build.bat debug release
 
 #### Unix (Linux/BSD/macOS)
 ```bash
-sudo ./build.sh install
+./build.sh install
 ```
 
 Installs to `/usr/local` by default. Use `PREFIX` to customize:
 ```bash
-sudo ./build.sh PREFIX=$HOME/.local install
+./build.sh PREFIX=$HOME/.local install
 ```
 
 #### Windows
 ```
 build.bat release
 ```
-* Once finished building, copy the headers from `include/` to `your_project/include/stk/` and `bin/release/stk.dll` to your project's lib directory.
+* Once finished building, copy the headers from `include/` to `your_project/include/stk/` and copy `bin/release/stk.dll` or `bin/release/stk.lib` to your project's `lib` directory, depending on whether you are linking dynamically or statically.
 
 ---
 
@@ -234,7 +234,7 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 1.0.0-pre.8
+**Current Version:** 1.0.0-pre.9
 
 ### What Works
 - Cross-platform module loading and hot-reloading
