@@ -4,6 +4,7 @@ OBJ_DIR = obj
 BIN_DIR = bin
 
 LIB_NAME = stk
+STATIC_LIB = lib$(LIB_NAME).a
 
 SRCS = src/module.c \
        src/platform.c \
