@@ -23,54 +23,47 @@ CFLAGS_STATIC =
 
 all: debug
 
-OBJS_DEBUG_SHARED   = ${SRCS:S/^src\//obj\/debug\/shared\//:S/.c$/.o/}
-OBJS_DEBUG_STATIC   = ${SRCS:S/^src\//obj\/debug\/static\//:S/.c$/.o/}
-OBJS_RELEASE_SHARED = ${SRCS:S/^src\//obj\/release\/shared\//:S/.c$/.o/}
-OBJS_RELEASE_STATIC = ${SRCS:S/^src\//obj\/release\/static\//:S/.c$/.o/}
+OBJS_DEBUG_SHARED   = ${SRCS:S|^src/|${.CURDIR}/obj/debug/shared/|:S/.c$/.o/}
+OBJS_DEBUG_STATIC   = ${SRCS:S|^src/|${.CURDIR}/obj/debug/static/|:S/.c$/.o/}
+OBJS_RELEASE_SHARED = ${SRCS:S|^src/|${.CURDIR}/obj/release/shared/|:S/.c$/.o/}
+OBJS_RELEASE_STATIC = ${SRCS:S|^src/|${.CURDIR}/obj/release/static/|:S/.c$/.o/}
 
-debug: ${BIN_DIR}/debug/${FULL_LIB} ${BIN_DIR}/debug/${STATIC_LIB}
-release: ${BIN_DIR}/release/${FULL_LIB} ${BIN_DIR}/release/${STATIC_LIB}
+debug: ${.CURDIR}/${BIN_DIR}/debug/${FULL_LIB} ${.CURDIR}/${BIN_DIR}/debug/${STATIC_LIB}
+release: ${.CURDIR}/${BIN_DIR}/release/${FULL_LIB} ${.CURDIR}/${BIN_DIR}/release/${STATIC_LIB}
 
-${BIN_DIR}/debug/${FULL_LIB}: ${OBJS_DEBUG_SHARED}
+${.CURDIR}/${BIN_DIR}/debug/${FULL_LIB}: ${OBJS_DEBUG_SHARED}
 	@mkdir -p ${.TARGET:H}
 	${CC} -shared -o ${.TARGET} ${.ALLSRC} ${LDFLAGS_PLAT}
 
-${BIN_DIR}/debug/${STATIC_LIB}: ${OBJS_DEBUG_STATIC}
+${.CURDIR}/${BIN_DIR}/debug/${STATIC_LIB}: ${OBJS_DEBUG_STATIC}
 	@mkdir -p ${.TARGET:H}
 	ar rcs ${.TARGET} ${.ALLSRC}
 
-${BIN_DIR}/release/${FULL_LIB}: ${OBJS_RELEASE_SHARED}
-	@mkdir -p ${.CURDIR}/${BIN_DIR}/release
-	${CC} -shared -s -o ${.CURDIR}/${BIN_DIR}/release/${FULL_LIB} ${.ALLSRC} ${LDFLAGS_PLAT}
+${.CURDIR}/${BIN_DIR}/release/${FULL_LIB}: ${OBJS_RELEASE_SHARED}
+	@mkdir -p ${.TARGET:H}
+	${CC} -shared -s -o ${.TARGET} ${.ALLSRC} ${LDFLAGS_PLAT}
 
-${BIN_DIR}/release/${STATIC_LIB}: ${OBJS_RELEASE_STATIC}
-	@mkdir -p ${.CURDIR}/${BIN_DIR}/release
-	ar rcs ${.CURDIR}/${BIN_DIR}/release/${STATIC_LIB} ${.ALLSRC}
+${.CURDIR}/${BIN_DIR}/release/${STATIC_LIB}: ${OBJS_RELEASE_STATIC}
+	@mkdir -p ${.TARGET:H}
+	ar rcs ${.TARGET} ${.ALLSRC}
 
 .for _src in ${SRCS}
-_obj_base = ${_src:S/^src\///:S/.c$/.o/}
-
-obj/debug/shared/${_obj_base}: ${_src}
+${.CURDIR}/obj/debug/shared/${_src:S|^src/||:S/.c$/.o/}: ${.CURDIR}/${_src}
 	@mkdir -p ${.TARGET:H}
-	${CC} ${CFLAGS_BASE} -g -O0 -MMD -MP -c ${.ALLSRC} -o ${.TARGET}
+	${CC} ${CFLAGS_BASE} -g -O0 -MMD -MP -MT ${.TARGET} -MF ${.TARGET:S/.o$/.d/} -c ${.ALLSRC} -o ${.TARGET}
 
-obj/debug/static/${_obj_base}: ${_src}
+${.CURDIR}/obj/debug/static/${_src:S|^src/||:S/.c$/.o/}: ${.CURDIR}/${_src}
 	@mkdir -p ${.TARGET:H}
-	${CC} ${CFLAGS_BASE} ${CFLAGS_STATIC} -g -O0 -MMD -MP -c ${.ALLSRC} -o ${.TARGET}
+	${CC} ${CFLAGS_BASE} ${CFLAGS_STATIC} -g -O0 -MMD -MP -MT ${.TARGET} -MF ${.TARGET:S/.o$/.d/} -c ${.ALLSRC} -o ${.TARGET}
 
-obj/release/shared/${_obj_base}: ${_src}
+${.CURDIR}/obj/release/shared/${_src:S|^src/||:S/.c$/.o/}: ${.CURDIR}/${_src}
 	@mkdir -p ${.TARGET:H}
-	${CC} ${CFLAGS_BASE} -O2 -MMD -MP -c ${.ALLSRC} -o ${.TARGET}
+	${CC} ${CFLAGS_BASE} -O2 -MMD -MP -MT ${.TARGET} -MF ${.TARGET:S/.o$/.d/} -c ${.ALLSRC} -o ${.TARGET}
 
-obj/release/static/${_obj_base}: ${_src}
+${.CURDIR}/obj/release/static/${_src:S|^src/||:S/.c$/.o/}: ${.CURDIR}/${_src}
 	@mkdir -p ${.TARGET:H}
-	${CC} ${CFLAGS_BASE} ${CFLAGS_STATIC} -O2 -MMD -MP -c ${.ALLSRC} -o ${.TARGET}
+	${CC} ${CFLAGS_BASE} ${CFLAGS_STATIC} -O2 -MMD -MP -MT ${.TARGET} -MF ${.TARGET:S/.o$/.d/} -c ${.ALLSRC} -o ${.TARGET}
 .endfor
-
-.-include "obj/debug/shared/*.d"
-.-include "obj/debug/static/*.d"
-.-include "obj/release/shared/*.d"
-.-include "obj/release/static/*.d"
 
 clean:
 	rm -rf ${.CURDIR}/${OBJ_DIR} ${.CURDIR}/${BIN_DIR}
