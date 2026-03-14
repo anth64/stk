@@ -9,8 +9,6 @@ ifeq ($(OS),Windows_NT)
     CFLAGS_STATIC :=
     MKDIR = if not exist $(subst /,\,$(1)) mkdir $(subst /,\,$(1))
     RMDIR = if exist $(subst /,\,$(1)) rd /s /q $(subst /,\,$(1))
-    AR := lib
-    ARFLAGS_STATIC := /OUT:
 else
     FULL_LIB := lib$(LIB_NAME).so
     STATIC_LIB := lib$(LIB_NAME).a
@@ -19,8 +17,6 @@ else
     CFLAGS_STATIC :=
     MKDIR = mkdir -p $(1)
     RMDIR = rm -rf $(1)
-    AR := ar
-    ARFLAGS_STATIC := rcs
 endif
 
 RELEASE_LDFLAGS := -s
@@ -44,11 +40,7 @@ $(BIN_DIR)/debug/$(FULL_LIB): $(SRCS:src/%.c=obj/debug/shared/%.o)
 
 $(BIN_DIR)/debug/$(STATIC_LIB): $(SRCS:src/%.c=obj/debug/static/%.o)
 	@$(call MKDIR,$(@D))
-ifeq ($(OS),Windows_NT)
-	$(AR) $(ARFLAGS_STATIC)$@ $^
-else
-	$(AR) $(ARFLAGS_STATIC) $@ $^
-endif
+	ar rcs $@ $^
 
 obj/debug/shared/%.o: src/%.c
 	@$(call MKDIR,$(@D))
@@ -65,11 +57,7 @@ $(BIN_DIR)/release/$(FULL_LIB): $(SRCS:src/%.c=obj/release/shared/%.o)
 
 $(BIN_DIR)/release/$(STATIC_LIB): $(SRCS:src/%.c=obj/release/static/%.o)
 	@$(call MKDIR,$(@D))
-ifeq ($(OS),Windows_NT)
-	$(AR) $(ARFLAGS_STATIC)$@ $^
-else
-	$(AR) $(ARFLAGS_STATIC) $@ $^
-endif
+	ar rcs $@ $^
 
 obj/release/shared/%.o: src/%.c
 	@$(call MKDIR,$(@D))
