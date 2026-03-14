@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.10] - 2026-03-14
+
+### Fixed
+- `bmake.mk`: all target and object paths now anchored with `${.CURDIR}` to fix incorrect path nesting when building from outside the project root; substitution delimiters switched to `|` to avoid conflicts with path separators; compile rules now emit `-MT`/`-MF` for correct dependency file targeting; removed stale `.-include` directives for `.d` files; release lib rules now use `${.TARGET}` consistently
+- `gmake.mk`: removed `AR`/`ARFLAGS_STATIC` variables and the `ifeq`-guarded static lib rules; both debug and release static lib rules now use `ar rcs` directly, as MinGW ships `ar` and `lib.exe` was incorrect
+
 ## [1.0.0-pre.9] - 2026-03-12
 
 ### Changed
@@ -201,7 +207,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.9...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.10...HEAD
+[1.0.0-pre.10]: https://github.com/anth64/stk/compare/v1.0.0-pre.9...v1.0.0-pre.10
 [1.0.0-pre.9]: https://github.com/anth64/stk/compare/v1.0.0-pre.8...v1.0.0-pre.9
 [1.0.0-pre.8]: https://github.com/anth64/stk/compare/v1.0.0-pre.7...v1.0.0-pre.8
 [1.0.0-pre.7]: https://github.com/anth64/stk/compare/v1.0.0-pre.6...v1.0.0-pre.7
