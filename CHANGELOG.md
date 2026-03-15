@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-pre.11] - 2026-03-15
+
+### Fixed
+- `gmake.mk`: `PREFIX` now defaults to `/usr` on Linux instead of `/usr/local`
+
 ## [1.0.0-pre.10] - 2026-03-14
 
 ### Fixed
@@ -207,7 +212,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency management and versioning not yet implemented
 - API is unstable and subject to change in future releases
 
-[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.10...HEAD
+[Unreleased]: https://github.com/anth64/stk/compare/v1.0.0-pre.11...HEAD
+[1.0.0-pre.11]: https://github.com/anth64/stk/compare/v1.0.0-pre.10...v1.0.0-pre.11
 [1.0.0-pre.10]: https://github.com/anth64/stk/compare/v1.0.0-pre.9...v1.0.0-pre.10
 [1.0.0-pre.9]: https://github.com/anth64/stk/compare/v1.0.0-pre.8...v1.0.0-pre.9
 [1.0.0-pre.8]: https://github.com/anth64/stk/compare/v1.0.0-pre.7...v1.0.0-pre.8

@@ -22,7 +22,7 @@ endif
 RELEASE_LDFLAGS := -s
 CFLAGS_BASE := -Wall -Wpedantic -I$(INC_DIR) -std=c89 $(CFLAGS_PLAT) 
 
-PREFIX ?= /usr/local
+PREFIX ?= /usr
 LIBDIR ?= $(PREFIX)/lib
 INCDIR ?= $(PREFIX)/include
 

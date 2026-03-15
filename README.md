@@ -46,7 +46,7 @@ build.bat debug release
 ./build.sh install
 ```
 
-Installs to `/usr/local` by default. Use `PREFIX` to customize:
+Installs to `/usr` on Linux, `/usr/local` on BSD/macOS by default. Use `PREFIX` to customize:
 ```bash
 ./build.sh PREFIX=$HOME/.local install
 ```
@@ -234,7 +234,7 @@ stk_init();
 
 ## Project Status
 
-**Current Version:** 1.0.0-pre.10
+**Current Version:** 1.0.0-pre.11
 
 ### What Works
 - Cross-platform module loading and hot-reloading
