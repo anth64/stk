@@ -278,7 +278,7 @@ void *platform_load_library(const char *path)
 #ifdef _WIN32
 	return (void *)LoadLibraryA(path);
 #else
-	return dlopen(path, RTLD_NOW);
+	return dlopen(path, RTLD_NOW | RTLD_GLOBAL);
 #endif
 }
 
