@@ -3,7 +3,7 @@ include config.mk
 ifeq ($(OS),Windows_NT)
     SHELL := cmd.exe
     FULL_LIB := $(LIB_NAME).dll
-    STATIC_LIB := $(LIB_NAME).lib
+    STATIC_LIB := lib$(LIB_NAME).a
     LDFLAGS_PLAT :=
     CFLAGS_PLAT :=
     CFLAGS_STATIC :=
